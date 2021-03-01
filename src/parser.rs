@@ -63,9 +63,13 @@ fn rel_type(input: &str) -> IResult<&str, String> {
     )(input)
 }
 
+fn node_body(input: &str) -> IResult<&str, (Option<String>, Vec<String>)> {
+    tuple((opt(identifier), many0(label)))(input)
+}
+
 fn node(input: &str) -> IResult<&str, Node> {
     map(
-        delimited(tag("("), tuple((opt(identifier), many0(label))), tag(")")),
+        delimited(tag("("), node_body, tag(")")),
         |(identifier, labels)| Node { identifier, labels },
     )(input)
 }
