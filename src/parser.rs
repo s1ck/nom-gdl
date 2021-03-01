@@ -74,6 +74,26 @@ fn node(input: &str) -> IResult<&str, Node> {
     )(input)
 }
 
+fn relationship_body(input: &str) -> IResult<&str, (Option<String>, Option<String>)> {
+    delimited(tag("["), tuple((opt(identifier), opt(rel_type))), tag("]"))(input)
+}
+
+fn relationship(input: &str) -> IResult<&str, Relationship> {
+    map(
+        alt((
+            delimited(tag("-"), opt(relationship_body), tag("->")),
+            delimited(tag("<-"), opt(relationship_body), tag("-")),
+        )),
+        |tuple: Option<(Option<String>, Option<String>)>| match tuple {
+            Some(t) => Relationship {
+                identifier: t.0,
+                rel_type: t.1,
+            },
+            None => Relationship::default(),
+        },
+    )(input)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,8 +169,12 @@ mod tests {
     }
 
     #[test]
-    fn nodes() {
+    fn node_empty() {
         assert_eq!(node("()"), Ok(("", Node::default())));
+    }
+
+    #[test]
+    fn node_with_identifier() {
         assert_eq!(
             node("(n0)"),
             Ok((
@@ -161,14 +185,100 @@ mod tests {
                 }
             ))
         );
+    }
+    #[test]
+    fn node_with_labels() {
+        assert_eq!(
+            node("(:A)"),
+            Ok((
+                "",
+                Node {
+                    labels: vec!["A".to_string()],
+                    ..Node::default()
+                }
+            ))
+        );
+        assert_eq!(
+            node("(:A:B)"),
+            Ok((
+                "",
+                Node {
+                    labels: vec!["A".to_string(), "B".to_string()],
+                    ..Node::default()
+                }
+            ))
+        );
+    }
 
+    #[test]
+    fn node_full() {
+        assert_eq!(
+            node("(n0:A)"),
+            Ok((
+                "",
+                Node {
+                    identifier: Some("n0".to_string()),
+                    labels: vec!["A".to_string()],
+                }
+            ))
+        );
         assert_eq!(
             node("(n0:A:B)"),
             Ok((
                 "",
                 Node {
                     identifier: Some("n0".to_string()),
-                    labels: vec!["A".to_string(), "B".to_string()]
+                    labels: vec!["A".to_string(), "B".to_string()],
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn relationship_empty() {
+        assert_eq!(relationship("-->"), Ok(("", Relationship::default())));
+        assert_eq!(relationship("-[]->"), Ok(("", Relationship::default())));
+        assert_eq!(relationship("<--"), Ok(("", Relationship::default())));
+        assert_eq!(relationship("<-[]-"), Ok(("", Relationship::default())));
+    }
+
+    #[test]
+    fn relationship_with_identifier() {
+        assert_eq!(
+            relationship("-[r0]->"),
+            Ok((
+                "",
+                Relationship {
+                    identifier: Some("r0".to_string()),
+                    ..Relationship::default()
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn relationship_with_rel_type() {
+        assert_eq!(
+            relationship("-[:BAR]->"),
+            Ok((
+                "",
+                Relationship {
+                    rel_type: Some("BAR".to_string()),
+                    ..Relationship::default()
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn relationship_full() {
+        assert_eq!(
+            relationship("-[r0:BAR]->"),
+            Ok((
+                "",
+                Relationship {
+                    identifier: Some("r0".to_string()),
+                    rel_type: Some("BAR".to_string()),
                 }
             ))
         );
