@@ -38,6 +38,20 @@ pub struct Relationship {
     rel_type: Option<String>,
 }
 
+impl FromStr for Relationship {
+    type Err = Error<String>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match relationship(s).finish() {
+            Ok((_remainder, relationship)) => Ok(relationship),
+            Err(Error { input, code }) => Err(Error {
+                input: input.to_string(),
+                code,
+            }),
+        }
+    }
+}
+
 fn is_uppercase_alphabetic(c: char) -> bool {
     c.is_alphabetic() && c.is_uppercase()
 }
@@ -244,51 +258,42 @@ mod tests {
 
     #[test]
     fn relationship_empty() {
-        assert_eq!(relationship("-->"), Ok(("", Relationship::default())));
-        assert_eq!(relationship("-[]->"), Ok(("", Relationship::default())));
-        assert_eq!(relationship("<--"), Ok(("", Relationship::default())));
-        assert_eq!(relationship("<-[]-"), Ok(("", Relationship::default())));
+        assert_eq!("-->".parse(), Ok(Relationship::default()));
+        assert_eq!("-[]->".parse(), Ok(Relationship::default()));
+        assert_eq!("<--".parse(), Ok(Relationship::default()));
+        assert_eq!("<-[]-".parse(), Ok(Relationship::default()));
     }
 
     #[test]
     fn relationship_with_identifier() {
         assert_eq!(
-            relationship("-[r0]->"),
-            Ok((
-                "",
-                Relationship {
-                    identifier: Some("r0".to_string()),
-                    ..Relationship::default()
-                }
-            ))
+            "-[r0]->".parse(),
+            Ok(Relationship {
+                identifier: Some("r0".to_string()),
+                ..Relationship::default()
+            })
         );
     }
 
     #[test]
     fn relationship_with_rel_type() {
         assert_eq!(
-            relationship("-[:BAR]->"),
-            Ok((
-                "",
-                Relationship {
-                    rel_type: Some("BAR".to_string()),
-                    ..Relationship::default()
-                }
-            ))
+            "-[:BAR]->".parse(),
+            Ok(Relationship {
+                rel_type: Some("BAR".to_string()),
+                ..Relationship::default()
+            })
         );
     }
 
     #[test]
     fn relationship_full() {
         assert_eq!(
-            relationship("-[r0:BAR]->"),
-            Ok((
-                "",
-                Relationship {
-                    identifier: Some("r0".to_string()),
-                    rel_type: Some("BAR".to_string()),
-                }
-            ))
+            "-[r0:BAR]->".parse(),
+            Ok(Relationship {
+                identifier: Some("r0".to_string()),
+                rel_type: Some("BAR".to_string()),
+            })
         );
     }
 }
