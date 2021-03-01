@@ -2,7 +2,7 @@
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while1},
+    bytes::complete::{tag, take_while, take_while1},
     character::complete::{alpha1, alphanumeric1},
     combinator::{map, opt, recognize},
     multi::many0,
@@ -13,6 +13,18 @@ use nom::{
 pub struct Node {
     identifier: Option<String>,
     labels: Vec<String>,
+}
+
+fn is_uppercase_alphabetic(c: char) -> bool {
+    c.is_alphabetic() && c.is_uppercase()
+}
+
+fn is_valid_label_token(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+fn is_valid_rel_type_token(c: char) -> bool {
+    is_uppercase_alphabetic(c) || c.is_numeric() || c == '_'
 }
 
 fn identifier(input: &str) -> IResult<&str, String> {
@@ -30,11 +42,24 @@ fn label(input: &str) -> IResult<&str, String> {
         preceded(
             tag(":"),
             recognize(pair(
-                take_while1(|c: char| c.is_uppercase()),
-                many0(alphanumeric1),
+                take_while1(is_uppercase_alphabetic),
+                take_while(is_valid_label_token),
             )),
         ),
         |label: &str| label.to_string(),
+    )(input)
+}
+
+fn rel_type(input: &str) -> IResult<&str, String> {
+    map(
+        preceded(
+            tag(":"),
+            recognize(pair(
+                take_while1(is_uppercase_alphabetic),
+                take_while(is_valid_rel_type_token),
+            )),
+        ),
+        |rel_type: &str| rel_type.to_string(),
     )(input)
 }
 
@@ -61,7 +86,10 @@ mod tests {
         }
     )]
     fn identifiers_positive(input: &str) {
-        assert!(identifier(input).is_ok())
+        let result = identifier(input);
+        assert!(result.is_ok());
+        let result = result.unwrap().1;
+        assert_eq!(result, input)
     }
 
     #[parameterized(
@@ -79,10 +107,15 @@ mod tests {
         input = {
             ":Foobar",
             ":F",
+            ":F42",
+            ":F_42",
         }
     )]
     fn labels_positive(input: &str) {
-        assert!(label(input).is_ok())
+        let result = label(input);
+        assert!(result.is_ok());
+        let result = result.unwrap().1;
+        assert_eq!(format!(":{}", result), input)
     }
 
     #[parameterized(
@@ -94,6 +127,21 @@ mod tests {
     )]
     fn labels_negative(input: &str) {
         assert!(label(input).is_err())
+    }
+
+    #[parameterized(
+        input = {
+            ":FOOBAR",
+            ":F",
+            ":F42",
+            ":F_42",
+        }
+    )]
+    fn rel_types_positive(input: &str) {
+        let result = rel_type(input);
+        assert!(result.is_ok());
+        let result = result.unwrap().1;
+        assert_eq!(format!(":{}", result), input)
     }
 
     #[test]
