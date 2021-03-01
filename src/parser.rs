@@ -1,18 +1,41 @@
 #![allow(dead_code)]
 
+use std::str::FromStr;
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
     character::complete::{alpha1, alphanumeric1},
     combinator::{map, opt, recognize},
+    error::Error,
     multi::many0,
     sequence::{delimited, pair, preceded, tuple},
-    IResult,
+    Finish, IResult,
 };
 #[derive(Debug, Default, PartialEq)]
 pub struct Node {
     identifier: Option<String>,
     labels: Vec<String>,
+}
+
+impl FromStr for Node {
+    type Err = Error<String>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match node(s).finish() {
+            Ok((_remaining, node)) => Ok(node),
+            Err(Error { input, code }) => Err(Error {
+                input: input.to_string(),
+                code,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub struct Relationship {
+    identifier: Option<String>,
+    rel_type: Option<String>,
 }
 
 fn is_uppercase_alphabetic(c: char) -> bool {
@@ -170,67 +193,52 @@ mod tests {
 
     #[test]
     fn node_empty() {
-        assert_eq!(node("()"), Ok(("", Node::default())));
+        assert_eq!("()".parse(), Ok(Node::default()))
     }
 
     #[test]
     fn node_with_identifier() {
         assert_eq!(
-            node("(n0)"),
-            Ok((
-                "",
-                Node {
-                    identifier: Some("n0".to_string()),
-                    ..Node::default()
-                }
-            ))
+            "(n0)".parse(),
+            Ok(Node {
+                identifier: Some("n0".to_string()),
+                ..Node::default()
+            })
         );
     }
     #[test]
     fn node_with_labels() {
         assert_eq!(
-            node("(:A)"),
-            Ok((
-                "",
-                Node {
-                    labels: vec!["A".to_string()],
-                    ..Node::default()
-                }
-            ))
+            "(:A)".parse(),
+            Ok(Node {
+                labels: vec!["A".to_string()],
+                ..Node::default()
+            })
         );
         assert_eq!(
-            node("(:A:B)"),
-            Ok((
-                "",
-                Node {
-                    labels: vec!["A".to_string(), "B".to_string()],
-                    ..Node::default()
-                }
-            ))
+            "(:A:B)".parse(),
+            Ok(Node {
+                labels: vec!["A".to_string(), "B".to_string()],
+                ..Node::default()
+            })
         );
     }
 
     #[test]
     fn node_full() {
         assert_eq!(
-            node("(n0:A)"),
-            Ok((
-                "",
-                Node {
-                    identifier: Some("n0".to_string()),
-                    labels: vec!["A".to_string()],
-                }
-            ))
+            "(n0:A)".parse(),
+            Ok(Node {
+                identifier: Some("n0".to_string()),
+                labels: vec!["A".to_string()],
+            })
         );
         assert_eq!(
-            node("(n0:A:B)"),
-            Ok((
-                "",
-                Node {
-                    identifier: Some("n0".to_string()),
-                    labels: vec!["A".to_string(), "B".to_string()],
-                }
-            ))
+            "(n0:A:B)".parse(),
+            Ok(Node {
+                identifier: Some("n0".to_string()),
+                labels: vec!["A".to_string(), "B".to_string()],
+            })
         );
     }
 
