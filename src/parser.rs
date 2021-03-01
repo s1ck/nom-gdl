@@ -36,6 +36,36 @@ impl FromStr for Node {
 pub struct Relationship {
     identifier: Option<String>,
     rel_type: Option<String>,
+    direction: Direction,
+}
+#[derive(Debug, PartialEq)]
+enum Direction {
+    Outgoing,
+    Incoming,
+}
+
+impl Default for Direction {
+    fn default() -> Self {
+        Direction::Outgoing
+    }
+}
+
+impl Relationship {
+    fn outgoing(identifier: Option<String>, rel_type: Option<String>) -> Self {
+        Relationship {
+            identifier,
+            rel_type,
+            direction: Direction::Outgoing,
+        }
+    }
+
+    fn incoming(identifier: Option<String>, rel_type: Option<String>) -> Self {
+        Relationship {
+            identifier,
+            rel_type,
+            direction: Direction::Incoming,
+        }
+    }
 }
 
 impl FromStr for Relationship {
@@ -118,15 +148,19 @@ fn relationship_body(input: &str) -> IResult<&str, (Option<String>, Option<Strin
 fn relationship(input: &str) -> IResult<&str, Relationship> {
     map(
         alt((
-            delimited(tag("-"), opt(relationship_body), tag("->")),
-            delimited(tag("<-"), opt(relationship_body), tag("-")),
+            tuple((tag("-"), opt(relationship_body), tag("->"))),
+            tuple((tag("<-"), opt(relationship_body), tag("-"))),
         )),
-        |tuple: Option<(Option<String>, Option<String>)>| match tuple {
-            Some(t) => Relationship {
-                identifier: t.0,
-                rel_type: t.1,
-            },
-            None => Relationship::default(),
+        |tuple| match tuple {
+            ("-", Some((identifier, rel_type)), "->") => {
+                Relationship::outgoing(identifier, rel_type)
+            }
+            ("<-", Some((identifier, rel_type)), "-") => {
+                Relationship::incoming(identifier, rel_type)
+            }
+            ("-", None, "->") => Relationship::outgoing(None, None),
+            ("<-", None, "-") => Relationship::incoming(None, None),
+            (_, _, _) => unreachable!(),
         },
     )(input)
 }
@@ -258,10 +292,10 @@ mod tests {
 
     #[test]
     fn relationship_empty() {
-        assert_eq!("-->".parse(), Ok(Relationship::default()));
-        assert_eq!("-[]->".parse(), Ok(Relationship::default()));
-        assert_eq!("<--".parse(), Ok(Relationship::default()));
-        assert_eq!("<-[]-".parse(), Ok(Relationship::default()));
+        assert_eq!("-->".parse(), Ok(Relationship::outgoing(None, None)));
+        assert_eq!("-[]->".parse(), Ok(Relationship::outgoing(None, None)));
+        assert_eq!("<--".parse(), Ok(Relationship::incoming(None, None)));
+        assert_eq!("<-[]-".parse(), Ok(Relationship::incoming(None, None)));
     }
 
     #[test]
@@ -270,6 +304,14 @@ mod tests {
             "-[r0]->".parse(),
             Ok(Relationship {
                 identifier: Some("r0".to_string()),
+                ..Relationship::default()
+            })
+        );
+        assert_eq!(
+            "<-[r0]-".parse(),
+            Ok(Relationship {
+                identifier: Some("r0".to_string()),
+                direction: Direction::Incoming,
                 ..Relationship::default()
             })
         );
@@ -284,6 +326,14 @@ mod tests {
                 ..Relationship::default()
             })
         );
+        assert_eq!(
+            "<-[:BAR]-".parse(),
+            Ok(Relationship {
+                rel_type: Some("BAR".to_string()),
+                direction: Direction::Incoming,
+                ..Relationship::default()
+            })
+        );
     }
 
     #[test]
@@ -293,7 +343,16 @@ mod tests {
             Ok(Relationship {
                 identifier: Some("r0".to_string()),
                 rel_type: Some("BAR".to_string()),
+                direction: Direction::Outgoing,
             })
         );
+        assert_eq!(
+            "<-[r0:BAR]-".parse(),
+            Ok(Relationship {
+                identifier: Some("r0".to_string()),
+                rel_type: Some("BAR".to_string()),
+                direction: Direction::Incoming,
+            })
+        )
     }
 }
