@@ -6,7 +6,7 @@ use nom::{
     character::complete::{alpha1, alphanumeric1},
     combinator::{map, opt, recognize},
     multi::many0,
-    sequence::{pair, preceded, tuple},
+    sequence::{delimited, pair, preceded, tuple},
     IResult,
 };
 #[derive(Debug, Default, PartialEq)]
@@ -65,8 +65,8 @@ fn rel_type(input: &str) -> IResult<&str, String> {
 
 fn node(input: &str) -> IResult<&str, Node> {
     map(
-        tuple((tag("("), opt(identifier), many0(label), tag(")"))),
-        |(_, identifier, labels, _)| Node { identifier, labels },
+        delimited(tag("("), tuple((opt(identifier), many0(label))), tag(")")),
+        |(identifier, labels)| Node { identifier, labels },
     )(input)
 }
 
