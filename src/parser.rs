@@ -9,7 +9,7 @@ use nom::{
     combinator::{map, opt, recognize},
     error::Error,
     multi::many0,
-    sequence::{delimited, pair, preceded, tuple},
+    sequence::{delimited, pair, preceded},
     Finish, IResult,
 };
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -39,6 +39,12 @@ impl Node {
             identifier: Some(identifier.into()),
             labels: labels.into_iter().map(Into::into).collect(),
         }
+    }
+}
+
+impl From<(Option<String>, Vec<String>)> for Node {
+    fn from((identifier, labels): (Option<String>, Vec<String>)) -> Self {
+        Node { identifier, labels }
     }
 }
 
@@ -178,7 +184,7 @@ fn identifier(input: &str) -> IResult<&str, String> {
             alt((alpha1, tag("_"))),
             many0(alt((alphanumeric1, tag("_")))),
         )),
-        |identifier: &str| identifier.to_string(),
+        String::from,
     )(input)
 }
 
@@ -191,7 +197,7 @@ fn label(input: &str) -> IResult<&str, String> {
                 take_while(is_valid_label_token),
             )),
         ),
-        |label: &str| label.to_string(),
+        String::from,
     )(input)
 }
 
@@ -204,43 +210,39 @@ fn rel_type(input: &str) -> IResult<&str, String> {
                 take_while(is_valid_rel_type_token),
             )),
         ),
-        |rel_type: &str| rel_type.to_string(),
+        String::from,
     )(input)
 }
 
 fn node_body(input: &str) -> IResult<&str, (Option<String>, Vec<String>)> {
-    tuple((opt(identifier), many0(label)))(input)
+    pair(opt(identifier), many0(label))(input)
 }
 
 fn node(input: &str) -> IResult<&str, Node> {
-    map(
-        delimited(tag("("), node_body, tag(")")),
-        |(identifier, labels)| Node { identifier, labels },
-    )(input)
+    map(delimited(tag("("), node_body, tag(")")), Node::from)(input)
 }
 
 fn relationship_body(input: &str) -> IResult<&str, (Option<String>, Option<String>)> {
-    delimited(tag("["), tuple((opt(identifier), opt(rel_type))), tag("]"))(input)
+    delimited(tag("["), pair(opt(identifier), opt(rel_type)), tag("]"))(input)
 }
 
 fn relationship(input: &str) -> IResult<&str, Relationship> {
-    map(
-        alt((
-            tuple((tag("-"), opt(relationship_body), tag("->"))),
-            tuple((tag("<-"), opt(relationship_body), tag("-"))),
-        )),
-        |tuple| match tuple {
-            ("-", Some((identifier, rel_type)), "->") => {
-                Relationship::outgoing(identifier, rel_type)
-            }
-            ("<-", Some((identifier, rel_type)), "-") => {
-                Relationship::incoming(identifier, rel_type)
-            }
-            ("-", None, "->") => Relationship::outgoing(None, None),
-            ("<-", None, "-") => Relationship::incoming(None, None),
-            (_, _, _) => unreachable!(),
-        },
-    )(input)
+    alt((
+        map(
+            delimited(tag("-"), opt(relationship_body), tag("->")),
+            |relationship| match relationship {
+                Some((identifier, rel_type)) => Relationship::outgoing(identifier, rel_type),
+                None => Relationship::outgoing(None, None),
+            },
+        ),
+        map(
+            delimited(tag("<-"), opt(relationship_body), tag("-")),
+            |relationship| match relationship {
+                Some((identifier, rel_type)) => Relationship::incoming(identifier, rel_type),
+                None => Relationship::incoming(None, None),
+            },
+        ),
+    ))(input)
 }
 
 fn path(input: &str) -> IResult<&str, Path> {
