@@ -9,3 +9,4 @@ nom = "6"
 
 [dev-dependencies]
 parameterized = "*"
+pretty_assertions = "0.6"

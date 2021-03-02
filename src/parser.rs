@@ -5,11 +5,11 @@ use std::str::FromStr;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
-    character::complete::{alpha1, alphanumeric1},
+    character::complete::{alpha1, alphanumeric1, multispace0},
     combinator::{map, opt, recognize},
     error::Error,
-    multi::many0,
-    sequence::{delimited, pair, preceded},
+    multi::{many0, many1},
+    sequence::{delimited, pair, preceded, terminated},
     Finish, IResult,
 };
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -166,6 +166,31 @@ impl FromStr for Path {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Default)]
+struct Graph {
+    paths: Vec<Path>,
+}
+
+impl Graph {
+    fn new(paths: Vec<Path>) -> Self {
+        Self { paths }
+    }
+}
+
+impl FromStr for Graph {
+    type Err = Error<String>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match graph(s).finish() {
+            Ok((_remainder, graph)) => Ok(graph),
+            Err(Error { input, code }) => Err(Error {
+                input: input.to_string(),
+                code,
+            }),
+        }
+    }
+}
+
 fn is_uppercase_alphabetic(c: char) -> bool {
     c.is_alphabetic() && c.is_uppercase()
 }
@@ -249,10 +274,21 @@ fn path(input: &str) -> IResult<&str, Path> {
     map(pair(node, many0(pair(relationship, node))), Path::from)(input)
 }
 
+fn graph(input: &str) -> IResult<&str, Graph> {
+    map(
+        many1(terminated(
+            preceded(multispace0, path),
+            preceded(multispace0, opt(tag(","))),
+        )),
+        Graph::new,
+    )(input)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use parameterized::parameterized;
+    use pretty_assertions::assert_eq as pretty_assert_eq;
 
     #[parameterized(
         input = {
@@ -514,6 +550,72 @@ mod tests {
                     ),
                 ]
             })
+        );
+    }
+
+    #[test]
+    fn graph_one_paths() {
+        pretty_assert_eq!(
+            "(a)-->(b)".parse(),
+            Ok(Graph::new(vec![Path {
+                start: Node::with_identifier("a"),
+                elements: vec![(
+                    Relationship::outgoing(None, None),
+                    Node::with_identifier("b")
+                )]
+            }]))
+        );
+    }
+
+    #[parameterized(
+        input = {
+            "(a)(b)",
+            "(a) (b)",
+            "(a)  (b)",
+            "(a),(b)",
+            "(a), (b)",
+            "(a) ,(b)",
+            "(a) , (b)",
+            "(a)  ,  (b)",
+            "(a)  ,  (b),    ",
+            r#"(a)
+               (b)"#,
+            r#"(a),
+               (b)"#,
+            r#"
+              (a)
+              (b)
+            "#,
+            r#"
+              (a),
+              (b)
+            "#,
+        }
+    )]
+    fn graph_two_paths(input: &str) {
+        pretty_assert_eq!(
+            input.parse(),
+            Ok(Graph::new(vec![
+                Path {
+                    start: Node::with_identifier("a"),
+                    elements: vec![]
+                },
+                Path {
+                    start: Node::with_identifier("b"),
+                    elements: vec![]
+                }
+            ]))
+        );
+    }
+
+    #[test]
+    fn graph_trailing_comma() {
+        pretty_assert_eq!(
+            "(a),".parse(),
+            Ok(Graph::new(vec![Path {
+                start: Node::with_identifier("a"),
+                elements: vec![]
+            }]))
         );
     }
 }
