@@ -12,10 +12,34 @@ use nom::{
     sequence::{delimited, pair, preceded, tuple},
     Finish, IResult,
 };
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Node {
     identifier: Option<String>,
     labels: Vec<String>,
+}
+
+impl Node {
+    pub fn new(identifier: Option<String>, labels: Vec<String>) -> Self {
+        Self { identifier, labels }
+    }
+
+    fn with_identifier(identifier: impl Into<String>) -> Self {
+        Node {
+            identifier: Some(identifier.into()),
+            labels: vec![],
+        }
+    }
+
+    fn with_identifier_and_labels<I, T>(identifier: impl Into<String>, labels: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<String>,
+    {
+        Node {
+            identifier: Some(identifier.into()),
+            labels: labels.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 impl FromStr for Node {
@@ -32,13 +56,13 @@ impl FromStr for Node {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Relationship {
     identifier: Option<String>,
     rel_type: Option<String>,
     direction: Direction,
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum Direction {
     Outgoing,
     Incoming,
@@ -59,12 +83,34 @@ impl Relationship {
         }
     }
 
+    fn outgoing_with_identifier(identifier: impl Into<String>) -> Self {
+        Self::outgoing(Some(identifier.into()), None)
+    }
+
+    fn outgoing_with_identifier_and_rel_type(
+        identifier: impl Into<String>,
+        rel_type: impl Into<String>,
+    ) -> Self {
+        Self::outgoing(Some(identifier.into()), Some(rel_type.into()))
+    }
+
     fn incoming(identifier: Option<String>, rel_type: Option<String>) -> Self {
         Relationship {
             identifier,
             rel_type,
             direction: Direction::Incoming,
         }
+    }
+
+    fn incoming_with_identifier(identifier: impl Into<String>) -> Self {
+        Self::incoming(Some(identifier.into()), None)
+    }
+
+    fn incoming_with_identifier_and_rel_type(
+        identifier: impl Into<String>,
+        rel_type: impl Into<String>,
+    ) -> Self {
+        Self::incoming(Some(identifier.into()), Some(rel_type.into()))
     }
 }
 
@@ -74,6 +120,38 @@ impl FromStr for Relationship {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match relationship(s).finish() {
             Ok((_remainder, relationship)) => Ok(relationship),
+            Err(Error { input, code }) => Err(Error {
+                input: input.to_string(),
+                code,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Default)]
+struct Path {
+    start: Node,
+    elements: Vec<(Relationship, Node)>,
+}
+
+impl Path {
+    fn new(start: Node, elements: Vec<(Relationship, Node)>) -> Self {
+        Self { start, elements }
+    }
+}
+
+impl From<(Node, Vec<(Relationship, Node)>)> for Path {
+    fn from((start, elements): (Node, Vec<(Relationship, Node)>)) -> Self {
+        Self { start, elements }
+    }
+}
+
+impl FromStr for Path {
+    type Err = Error<String>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match path(s).finish() {
+            Ok((_remainder, path)) => Ok(path),
             Err(Error { input, code }) => Err(Error {
                 input: input.to_string(),
                 code,
@@ -163,6 +241,10 @@ fn relationship(input: &str) -> IResult<&str, Relationship> {
             (_, _, _) => unreachable!(),
         },
     )(input)
+}
+
+fn path(input: &str) -> IResult<&str, Path> {
+    map(pair(node, many0(pair(relationship, node))), Path::from)(input)
 }
 
 #[cfg(test)]
@@ -354,5 +436,82 @@ mod tests {
                 direction: Direction::Incoming,
             })
         )
+    }
+
+    #[test]
+    fn path_node_only() {
+        assert_eq!(
+            "(a)".parse(),
+            Ok(Path {
+                start: Node::with_identifier("a"),
+                elements: vec![]
+            })
+        );
+    }
+
+    #[test]
+    fn path_one_hop_path() {
+        assert_eq!(
+            "(a)-->(b)".parse(),
+            Ok(Path {
+                start: Node::with_identifier("a"),
+                elements: vec![(
+                    Relationship::outgoing(None, None),
+                    Node::with_identifier("b")
+                )]
+            })
+        );
+    }
+
+    #[test]
+    fn path_two_hop_path() {
+        assert_eq!(
+            "(a)-->(b)<--(c)".parse(),
+            Ok(Path {
+                start: Node::with_identifier("a"),
+                elements: vec![
+                    (
+                        Relationship::outgoing(None, None),
+                        Node::with_identifier("b")
+                    ),
+                    (
+                        Relationship::incoming(None, None),
+                        Node::with_identifier("c")
+                    ),
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn path_with_node_labels_and_relationship_types() {
+        assert_eq!(
+            "(a:A)<-[:R]-(:B)-[rel]->(c)-[]->(d:D1:D2)<--(:E1:E2)-[r:REL]->()".parse(),
+            Ok(Path {
+                start: Node::with_identifier_and_labels("a", vec!["A"]),
+                elements: vec![
+                    (
+                        Relationship::incoming(None, Some("R".to_string())),
+                        Node::new(None, vec!["B".to_string()])
+                    ),
+                    (
+                        Relationship::outgoing_with_identifier("rel"),
+                        Node::with_identifier("c")
+                    ),
+                    (
+                        Relationship::outgoing(None, None),
+                        Node::with_identifier_and_labels("d", vec!["D1", "D2"])
+                    ),
+                    (
+                        Relationship::incoming(None, None),
+                        Node::new(None, vec!["E1".to_string(), "E2".to_string()])
+                    ),
+                    (
+                        Relationship::outgoing_with_identifier_and_rel_type("r", "REL"),
+                        Node::default()
+                    ),
+                ]
+            })
+        );
     }
 }
