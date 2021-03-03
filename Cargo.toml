@@ -4,9 +4,11 @@ edition = "2018"
 license = "Apache-2.0 OR MIT"
 name = "gdl"
 version = "0.1.0"
+
 [dependencies]
 nom = "6"
 
 [dev-dependencies]
+test-case = "1.1.0"
 parameterized = "*"
 pretty_assertions = "0.6"

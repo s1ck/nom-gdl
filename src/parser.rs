@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::str::FromStr;
 
 use nom::{
@@ -13,9 +11,9 @@ use nom::{
     Finish, IResult,
 };
 #[derive(Debug, Default, PartialEq, Eq)]
-pub struct Node {
-    identifier: Option<String>,
-    labels: Vec<String>,
+pub(crate) struct Node {
+    pub(crate) identifier: Option<String>,
+    pub(crate) labels: Vec<String>,
 }
 
 impl Node {
@@ -63,13 +61,13 @@ impl FromStr for Node {
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
-pub struct Relationship {
-    identifier: Option<String>,
-    rel_type: Option<String>,
-    direction: Direction,
+pub(crate) struct Relationship {
+    pub(crate) identifier: Option<String>,
+    pub(crate) rel_type: Option<String>,
+    pub(crate) direction: Direction,
 }
-#[derive(Debug, PartialEq, Eq)]
-enum Direction {
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub(crate) enum Direction {
     Outgoing,
     Incoming,
 }
@@ -135,9 +133,9 @@ impl FromStr for Relationship {
 }
 
 #[derive(Debug, PartialEq, Eq, Default)]
-struct Path {
-    start: Node,
-    elements: Vec<(Relationship, Node)>,
+pub(crate) struct Path {
+    pub(crate) start: Node,
+    pub(crate) elements: Vec<(Relationship, Node)>,
 }
 
 impl Path {
@@ -167,8 +165,8 @@ impl FromStr for Path {
 }
 
 #[derive(Debug, PartialEq, Eq, Default)]
-struct Graph {
-    paths: Vec<Path>,
+pub(crate) struct Graph {
+    pub(crate) paths: Vec<Path>,
 }
 
 impl Graph {
@@ -243,7 +241,7 @@ fn node_body(input: &str) -> IResult<&str, (Option<String>, Vec<String>)> {
     pair(opt(identifier), many0(label))(input)
 }
 
-fn node(input: &str) -> IResult<&str, Node> {
+pub(crate) fn node(input: &str) -> IResult<&str, Node> {
     map(delimited(tag("("), node_body, tag(")")), Node::from)(input)
 }
 
@@ -251,7 +249,7 @@ fn relationship_body(input: &str) -> IResult<&str, (Option<String>, Option<Strin
     delimited(tag("["), pair(opt(identifier), opt(rel_type)), tag("]"))(input)
 }
 
-fn relationship(input: &str) -> IResult<&str, Relationship> {
+pub(crate) fn relationship(input: &str) -> IResult<&str, Relationship> {
     alt((
         map(
             delimited(tag("-"), opt(relationship_body), tag("->")),
@@ -270,11 +268,11 @@ fn relationship(input: &str) -> IResult<&str, Relationship> {
     ))(input)
 }
 
-fn path(input: &str) -> IResult<&str, Path> {
+pub(crate) fn path(input: &str) -> IResult<&str, Path> {
     map(pair(node, many0(pair(relationship, node))), Path::from)(input)
 }
 
-fn graph(input: &str) -> IResult<&str, Graph> {
+pub(crate) fn graph(input: &str) -> IResult<&str, Graph> {
     map(
         many1(terminated(
             preceded(multispace0, path),
