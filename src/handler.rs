@@ -3,10 +3,18 @@ use std::{
     rc::Rc,
 };
 
+use thiserror::Error;
+
 use crate::parser::{
     Direction, Graph as ParseGraph, Node as ParseNode, Path as ParsePath,
     Relationship as ParseRelationship,
 };
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum GraphHandlerError {
+    #[error("multiple declaration of variable `{0}`")]
+    MultipleDeclarations(String),
+}
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Node {
@@ -55,7 +63,7 @@ struct GraphHandler {
 }
 
 impl GraphHandler {
-    fn node(&mut self, parse_node: ParseNode) -> &Node {
+    fn node(&mut self, parse_node: ParseNode) -> Result<&Node, GraphHandlerError> {
         // if the node is not in the cache, we
         // use the next_id as node id and identifier
         let next_id = self.node_cache.len();
@@ -70,11 +78,10 @@ impl GraphHandler {
         match self.node_cache.entry(identifier) {
             Entry::Occupied(entry) => {
                 // verify that parse node has no additional content
-                // TODO: Result and Error
                 if parse_node.labels.len() > 0 {
-                    panic!()
+                    return Err(GraphHandlerError::MultipleDeclarations(entry.key().clone()));
                 }
-                entry.into_mut()
+                Ok(entry.into_mut())
             }
             Entry::Vacant(entry) => {
                 let identifier = entry.key().clone();
@@ -96,12 +103,15 @@ impl GraphHandler {
                     labels,
                 };
 
-                entry.insert(new_node)
+                Ok(entry.insert(new_node))
             }
         }
     }
 
-    fn relationship(&mut self, parse_relationship: ParseRelationship) -> &mut Relationship {
+    fn relationship(
+        &mut self,
+        parse_relationship: ParseRelationship,
+    ) -> Result<&mut Relationship, GraphHandlerError> {
         let next_id = self.relationship_cache.len();
 
         let identifier = match parse_relationship.identifier {
@@ -114,10 +124,9 @@ impl GraphHandler {
         match self.relationship_cache.entry(identifier) {
             Entry::Occupied(entry) => {
                 if parse_relationship.rel_type.is_some() {
-                    // TODO: Result
-                    panic!()
+                    return Err(GraphHandlerError::MultipleDeclarations(entry.key().clone()));
                 }
-                entry.into_mut()
+                Ok(entry.into_mut())
             }
             Entry::Vacant(entry) => {
                 let identifier = entry.key().clone();
@@ -141,18 +150,18 @@ impl GraphHandler {
                     rel_type,
                 };
 
-                entry.insert(new_relationship)
+                Ok(entry.insert(new_relationship))
             }
         }
     }
 
-    fn path(&mut self, parse_path: ParsePath) {
-        let mut first_node_id = self.node(parse_path.start).id;
+    fn path(&mut self, parse_path: ParsePath) -> Result<(), GraphHandlerError> {
+        let mut first_node_id = self.node(parse_path.start)?.id;
 
         for (parse_rel, parse_node) in parse_path.elements.into_iter() {
             let direction = parse_rel.direction;
-            let second_node_id = self.node(parse_node).id;
-            let relationship = self.relationship(parse_rel);
+            let second_node_id = self.node(parse_node)?.id;
+            let relationship = self.relationship(parse_rel)?;
 
             match direction {
                 Direction::Outgoing => {
@@ -167,10 +176,14 @@ impl GraphHandler {
 
             first_node_id = second_node_id;
         }
+        Ok(())
     }
 
-    fn graph(&mut self, parse_graph: ParseGraph) {
-        parse_graph.paths.into_iter().for_each(|p| self.path(p))
+    fn graph(&mut self, parse_graph: ParseGraph) -> Result<(), GraphHandlerError> {
+        for parse_path in parse_graph.paths {
+            self.path(parse_path)?
+        }
+        Ok(())
     }
 }
 
@@ -186,7 +199,7 @@ mod tests {
     fn convert_parse_node(input: &str, expected: Node) {
         let parse_node = input.parse::<ParseNode>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        let node = graph_handler.node(parse_node);
+        let node = graph_handler.node(parse_node).unwrap();
 
         assert_eq!(*node, expected)
     }
@@ -198,7 +211,7 @@ mod tests {
     fn convert_parse_relationship(input: &str, expected: Relationship) {
         let parse_relationship = input.parse::<ParseRelationship>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        let relationship = graph_handler.relationship(parse_relationship);
+        let relationship = graph_handler.relationship(parse_relationship).unwrap();
 
         assert_eq!(*relationship, expected)
     }
@@ -207,7 +220,7 @@ mod tests {
     fn convert_path() {
         let parse_path = "(a)-[r1]->(b)<-[r2]-(a)".parse::<ParsePath>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        graph_handler.path(parse_path);
+        graph_handler.path(parse_path).unwrap();
 
         let node_a = graph_handler.node_cache.get("a").unwrap();
         let node_b = graph_handler.node_cache.get("b").unwrap();
@@ -224,7 +237,7 @@ mod tests {
     fn convert_graph() {
         let parse_graph = "(a)-[r1]->(b),(b)<-[r2]-(a)".parse::<ParseGraph>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        graph_handler.graph(parse_graph);
+        graph_handler.graph(parse_graph).unwrap();
 
         let node_a = graph_handler.node_cache.get("a").unwrap();
         let node_b = graph_handler.node_cache.get("b").unwrap();
@@ -235,5 +248,17 @@ mod tests {
         assert_eq!(node_b.id, rel_r1.target_id);
         assert_eq!(node_b.id, rel_r2.target_id);
         assert_eq!(node_a.id, rel_r1.source_id);
+    }
+
+    #[test]
+    fn multiple_declarations_error() {
+        let parse_path = "(a:A)-->(a:B)".parse::<ParsePath>().unwrap();
+        let mut graph_handler = GraphHandler::default();
+        let error = graph_handler.path(parse_path).unwrap_err();
+
+        assert_eq!(
+            error,
+            GraphHandlerError::MultipleDeclarations("a".to_string())
+        );
     }
 }

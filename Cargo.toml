@@ -7,6 +7,7 @@ version = "0.1.0"
 
 [dependencies]
 nom = "6"
+thiserror = "1.0.24"
 
 [dev-dependencies]
 test-case = "1.1.0"
