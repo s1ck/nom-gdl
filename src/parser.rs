@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
     character::complete::{alpha1, alphanumeric1, multispace0},
-    combinator::{map, opt, recognize},
+    combinator::{all_consuming, cut, map, opt, recognize},
     error::Error,
     multi::{many0, many1},
     sequence::{delimited, pair, preceded, terminated},
@@ -50,7 +50,7 @@ impl FromStr for Node {
     type Err = Error<String>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match node(s).finish() {
+        match all_consuming(node)(s).finish() {
             Ok((_remaining, node)) => Ok(node),
             Err(Error { input, code }) => Err(Error {
                 input: input.to_string(),
@@ -122,7 +122,7 @@ impl FromStr for Relationship {
     type Err = Error<String>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match relationship(s).finish() {
+        match all_consuming(relationship)(s).finish() {
             Ok((_remainder, relationship)) => Ok(relationship),
             Err(Error { input, code }) => Err(Error {
                 input: input.to_string(),
@@ -154,7 +154,7 @@ impl FromStr for Path {
     type Err = Error<String>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match path(s).finish() {
+        match all_consuming(path)(s).finish() {
             Ok((_remainder, path)) => Ok(path),
             Err(Error { input, code }) => Err(Error {
                 input: input.to_string(),
@@ -179,7 +179,7 @@ impl FromStr for Graph {
     type Err = Error<String>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match graph(s).finish() {
+        match all_consuming(graph)(s).finish() {
             Ok((_remainder, graph)) => Ok(graph),
             Err(Error { input, code }) => Err(Error {
                 input: input.to_string(),
@@ -215,10 +215,10 @@ fn label(input: &str) -> IResult<&str, String> {
     map(
         preceded(
             tag(":"),
-            recognize(pair(
+            cut(recognize(pair(
                 take_while1(is_uppercase_alphabetic),
                 take_while(is_valid_label_token),
-            )),
+            ))),
         ),
         String::from,
     )(input)
@@ -228,10 +228,10 @@ fn rel_type(input: &str) -> IResult<&str, String> {
     map(
         preceded(
             tag(":"),
-            recognize(pair(
+            cut(recognize(pair(
                 take_while1(is_uppercase_alphabetic),
                 take_while(is_valid_rel_type_token),
-            )),
+            ))),
         ),
         String::from,
     )(input)
@@ -269,7 +269,7 @@ pub(crate) fn relationship(input: &str) -> IResult<&str, Relationship> {
 }
 
 pub(crate) fn path(input: &str) -> IResult<&str, Path> {
-    map(pair(node, many0(pair(relationship, node))), Path::from)(input)
+    map(pair(node, many0(pair(relationship, cut(node)))), Path::from)(input)
 }
 
 pub(crate) fn graph(input: &str) -> IResult<&str, Graph> {
@@ -287,6 +287,7 @@ mod tests {
     use super::*;
     use parameterized::parameterized;
     use pretty_assertions::assert_eq as pretty_assert_eq;
+    use test_case::test_case;
 
     #[parameterized(
         input = {
@@ -406,6 +407,11 @@ mod tests {
                 labels: vec!["A".to_string(), "B".to_string()],
             })
         );
+    }
+
+    #[test_case("(42:A)" ; "numeric identifier")]
+    fn node_negative(input: &str) {
+        assert!(input.parse::<Node>().is_err())
     }
 
     #[test]
@@ -551,6 +557,12 @@ mod tests {
         );
     }
 
+    #[test_case("(42:A)" ; "numeric identifier")]
+    #[test_case("(a)-->(42:A)" ; "numeric identifier one hop")]
+    fn path_negative(input: &str) {
+        assert!(input.parse::<Path>().is_err())
+    }
+
     #[test]
     fn graph_one_paths() {
         pretty_assert_eq!(
@@ -575,7 +587,7 @@ mod tests {
             "(a) ,(b)",
             "(a) , (b)",
             "(a)  ,  (b)",
-            "(a)  ,  (b),    ",
+            "(a)  ,  (b),",
             r#"(a)
                (b)"#,
             r#"(a),

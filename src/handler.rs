@@ -10,10 +10,12 @@ use crate::parser::{
     Relationship as ParseRelationship,
 };
 
-#[derive(Error, Debug, PartialEq, Eq)]
+#[derive(Error, Debug, PartialEq)]
 pub enum GraphHandlerError {
     #[error("multiple declaration of variable `{0}`")]
     MultipleDeclarations(String),
+    #[error("error during parsing")]
+    Parser(#[from] nom::error::Error<String>),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -63,6 +65,12 @@ struct GraphHandler {
 }
 
 impl GraphHandler {
+    pub fn parse(&mut self, input: &str) -> Result<(), GraphHandlerError> {
+        let parse_graph = input.parse::<ParseGraph>()?;
+        self.graph(parse_graph)?;
+        Ok(())
+    }
+
     fn node(&mut self, parse_node: ParseNode) -> Result<&Node, GraphHandlerError> {
         // if the node is not in the cache, we
         // use the next_id as node id and identifier
@@ -190,6 +198,7 @@ impl GraphHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nom::error::ErrorKind;
     use test_case::test_case;
 
     #[test_case("()", Node::new(0, "__v0", Vec::<String>::new()) ; "empty")]
@@ -260,5 +269,15 @@ mod tests {
             error,
             GraphHandlerError::MultipleDeclarations("a".to_string())
         );
+    }
+
+    #[test]
+    fn parser_error() {
+        let mut graph_handler = GraphHandler::default();
+        let error = graph_handler.parse("(a)-->(42:A)").unwrap_err();
+        assert_eq!(
+            error,
+            GraphHandlerError::Parser(nom::error::Error::new("42:A)".to_string(), ErrorKind::Tag))
+        )
     }
 }
