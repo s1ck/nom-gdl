@@ -285,20 +285,15 @@ pub(crate) fn graph(input: &str) -> IResult<&str, Graph> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parameterized::parameterized;
     use pretty_assertions::assert_eq as pretty_assert_eq;
     use test_case::test_case;
 
-    #[parameterized(
-        input = {
-            "foobar",
-            "_foobar",
-            "__foo_bar",
-            "f",
-            "F",
-            "f1234",
-        }
-    )]
+    #[test_case("foobar"; "multiple alphabetical")]
+    #[test_case("_foobar"; "starts with underscore")]
+    #[test_case("__foo_bar"; "mixed underscore")]
+    #[test_case("f"; "single alphabetical lowercase")]
+    #[test_case("F"; "single alphabetical uppercase")]
+    #[test_case("f1234"; "alphanumeric")]
     fn identifiers_positive(input: &str) {
         let result = identifier(input);
         assert!(result.is_ok());
@@ -306,25 +301,17 @@ mod tests {
         assert_eq!(result, input)
     }
 
-    #[parameterized(
-        input = {
-            "1234",
-            "+foo",
-            " ",
-        }
-    )]
+    #[test_case("1234"; "numerical")]
+    #[test_case("+foo"; "special char")]
+    #[test_case("."; "another special char")]
     fn identifiers_negative(input: &str) {
         assert!(identifier(input).is_err())
     }
 
-    #[parameterized(
-        input = {
-            ":Foobar",
-            ":F",
-            ":F42",
-            ":F_42",
-        }
-    )]
+    #[test_case(":Foobar"; "alphabetical")]
+    #[test_case(":F"; "alphabetical single char")]
+    #[test_case(":F42"; "alphanumerical")]
+    #[test_case(":F_42"; "alphanumerical and underscore")]
     fn labels_positive(input: &str) {
         let result = label(input);
         assert!(result.is_ok());
@@ -332,25 +319,18 @@ mod tests {
         assert_eq!(format!(":{}", result), input)
     }
 
-    #[parameterized(
-        input = {
-            ":foobar",
-            ":_",
-            "_",
-        }
-    )]
+    #[test_case(":foobar"; "lower case")]
+    #[test_case(":_"; "colon and single underscore")]
+    #[test_case("_"; "single underscore")]
+    #[test_case(":1234"; "numerical")]
     fn labels_negative(input: &str) {
         assert!(label(input).is_err())
     }
 
-    #[parameterized(
-        input = {
-            ":FOOBAR",
-            ":F",
-            ":F42",
-            ":F_42",
-        }
-    )]
+    #[test_case(":FOOBAR"; "multiple alphabetical")]
+    #[test_case(":F"; "single alphabetical")]
+    #[test_case(":F42"; "alphanumerical")]
+    #[test_case(":F_42"; "alphanumerical and underscore")]
     fn rel_types_positive(input: &str) {
         let result = rel_type(input);
         assert!(result.is_ok());
@@ -577,31 +557,19 @@ mod tests {
         );
     }
 
-    #[parameterized(
-        input = {
-            "(a)(b)",
-            "(a) (b)",
-            "(a)  (b)",
-            "(a),(b)",
-            "(a), (b)",
-            "(a) ,(b)",
-            "(a) , (b)",
-            "(a)  ,  (b)",
-            "(a)  ,  (b),",
-            r#"(a)
-               (b)"#,
-            r#"(a),
-               (b)"#,
-            r#"
-              (a)
-              (b)
-            "#,
-            r#"
-              (a),
-              (b)
-            "#,
-        }
-    )]
+    #[test_case("(a)(b)"; "no comma")]
+    #[test_case("(a) (b)"; "one space")]
+    #[test_case("(a)  (b)"; "more space")]
+    #[test_case("(a),(b)"; "comma")]
+    #[test_case("(a), (b)"; "comma and space")]
+    #[test_case("(a) ,(b)"; "comma and space in front")]
+    #[test_case("(a) , (b)"; "comma and more space")]
+    #[test_case("(a)  ,  (b)"; "comma and moore space")]
+    #[test_case("(a)  ,  (b),"; "comma and mooore space")]
+    #[test_case("(a)\n(b)"; "new line")]
+    #[test_case("(a),\n(b)"; "new line and comma on same line")]
+    #[test_case("(a)\n,(b)"; "new line and comma on next line")]
+    #[test_case("(a)\n\r,(b)\n\r"; "new line at the end")]
     fn graph_two_paths(input: &str) {
         pretty_assert_eq!(
             input.parse(),
