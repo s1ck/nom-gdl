@@ -67,11 +67,29 @@ struct GraphHandler {
 impl GraphHandler {
     pub fn parse(&mut self, input: &str) -> Result<(), GraphHandlerError> {
         let parse_graph = input.parse::<ParseGraph>()?;
-        self.graph(parse_graph)?;
+        self.convert_graph(parse_graph)?;
         Ok(())
     }
 
-    fn node(&mut self, parse_node: ParseNode) -> Result<&Node, GraphHandlerError> {
+    pub fn node_count(&self) -> usize {
+        self.node_cache.len()
+    }
+
+    pub fn relationship_count(&self) -> usize {
+        self.relationship_cache.len()
+    }
+
+    pub fn get_node(&self, identifier: &str) -> Option<&Node> {
+        self.node_cache.get(identifier)
+    }
+
+    pub fn get_relationship(&self, identifier: &str) -> Option<&Relationship> {
+        self.relationship_cache.get(identifier)
+    }
+}
+
+impl GraphHandler {
+    fn convert_node(&mut self, parse_node: ParseNode) -> Result<&Node, GraphHandlerError> {
         // if the node is not in the cache, we
         // use the next_id as node id and identifier
         let next_id = self.node_cache.len();
@@ -116,7 +134,7 @@ impl GraphHandler {
         }
     }
 
-    fn relationship(
+    fn convert_relationship(
         &mut self,
         parse_relationship: ParseRelationship,
     ) -> Result<&mut Relationship, GraphHandlerError> {
@@ -163,13 +181,13 @@ impl GraphHandler {
         }
     }
 
-    fn path(&mut self, parse_path: ParsePath) -> Result<(), GraphHandlerError> {
-        let mut first_node_id = self.node(parse_path.start)?.id;
+    fn convert_path(&mut self, parse_path: ParsePath) -> Result<(), GraphHandlerError> {
+        let mut first_node_id = self.convert_node(parse_path.start)?.id;
 
         for (parse_rel, parse_node) in parse_path.elements.into_iter() {
             let direction = parse_rel.direction;
-            let second_node_id = self.node(parse_node)?.id;
-            let relationship = self.relationship(parse_rel)?;
+            let second_node_id = self.convert_node(parse_node)?.id;
+            let relationship = self.convert_relationship(parse_rel)?;
 
             match direction {
                 Direction::Outgoing => {
@@ -187,9 +205,9 @@ impl GraphHandler {
         Ok(())
     }
 
-    fn graph(&mut self, parse_graph: ParseGraph) -> Result<(), GraphHandlerError> {
+    fn convert_graph(&mut self, parse_graph: ParseGraph) -> Result<(), GraphHandlerError> {
         for parse_path in parse_graph.paths {
-            self.path(parse_path)?
+            self.convert_path(parse_path)?
         }
         Ok(())
     }
@@ -205,10 +223,10 @@ mod tests {
     #[test_case("(a)", Node::new(0, "a", Vec::<String>::new()) ; "identifier only")]
     #[test_case("(:A)", Node::new(0, "__v0", vec!["A"]) ; "label only")]
     #[test_case("(a:A)", Node::new(0, "a", vec!["A"]) ; "full")]
-    fn convert_parse_node(input: &str, expected: Node) {
+    fn convert_node(input: &str, expected: Node) {
         let parse_node = input.parse::<ParseNode>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        let node = graph_handler.node(parse_node).unwrap();
+        let node = graph_handler.convert_node(parse_node).unwrap();
 
         assert_eq!(*node, expected)
     }
@@ -217,10 +235,12 @@ mod tests {
     #[test_case("-[r]->", Relationship::new("r", None) ; "identifier only")]
     #[test_case("-[:R]->", Relationship::new("__r0", Some("R")) ; "rel_type only")]
     #[test_case("-[r:R]->", Relationship::new("r", Some("R")) ; "full")]
-    fn convert_parse_relationship(input: &str, expected: Relationship) {
+    fn convert_relationship(input: &str, expected: Relationship) {
         let parse_relationship = input.parse::<ParseRelationship>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        let relationship = graph_handler.relationship(parse_relationship).unwrap();
+        let relationship = graph_handler
+            .convert_relationship(parse_relationship)
+            .unwrap();
 
         assert_eq!(*relationship, expected)
     }
@@ -229,7 +249,7 @@ mod tests {
     fn convert_path() {
         let parse_path = "(a)-[r1]->(b)<-[r2]-(a)".parse::<ParsePath>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        graph_handler.path(parse_path).unwrap();
+        graph_handler.convert_path(parse_path).unwrap();
 
         let node_a = graph_handler.node_cache.get("a").unwrap();
         let node_b = graph_handler.node_cache.get("b").unwrap();
@@ -246,7 +266,7 @@ mod tests {
     fn convert_graph() {
         let parse_graph = "(a)-[r1]->(b),(b)<-[r2]-(a)".parse::<ParseGraph>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        graph_handler.graph(parse_graph).unwrap();
+        graph_handler.convert_graph(parse_graph).unwrap();
 
         let node_a = graph_handler.node_cache.get("a").unwrap();
         let node_b = graph_handler.node_cache.get("b").unwrap();
@@ -260,10 +280,30 @@ mod tests {
     }
 
     #[test]
+    fn get_node() {
+        let mut graph_handler = GraphHandler::default();
+        graph_handler.parse("(n0),(n1),()").unwrap();
+
+        assert_eq!(graph_handler.node_count(), 3);
+        assert!(graph_handler.get_node("n0").is_some());
+        assert!(graph_handler.get_node("n1").is_some());
+    }
+
+    #[test]
+    fn get_relationship() {
+        let mut graph_handler = GraphHandler::default();
+        graph_handler.parse("()-->()-[r0]->()<-[r1]-()").unwrap();
+
+        assert_eq!(graph_handler.relationship_count(), 3);
+        assert!(graph_handler.get_relationship("r0").is_some());
+        assert!(graph_handler.get_relationship("r1").is_some());
+    }
+
+    #[test]
     fn multiple_declarations_error() {
         let parse_path = "(a:A)-->(a:B)".parse::<ParsePath>().unwrap();
         let mut graph_handler = GraphHandler::default();
-        let error = graph_handler.path(parse_path).unwrap_err();
+        let error = graph_handler.convert_path(parse_path).unwrap_err();
 
         assert_eq!(
             error,
