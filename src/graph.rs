@@ -60,13 +60,13 @@ impl Relationship {
 }
 
 #[derive(Default)]
-pub struct GraphHandler {
+pub struct GdlGraph {
     token_cache: HashMap<String, Rc<String>>,
     node_cache: HashMap<String, Node>,
     relationship_cache: HashMap<String, Relationship>,
 }
 
-impl GraphHandler {
+impl GdlGraph {
     pub fn from(input: &str) -> Result<Self, GraphHandlerError> {
         let mut graph_handler = Self::default();
         graph_handler.parse(input)?;
@@ -104,7 +104,7 @@ impl GraphHandler {
     }
 }
 
-impl GraphHandler {
+impl GdlGraph {
     fn convert_node(&mut self, parse_node: ParseNode) -> Result<&Node, GraphHandlerError> {
         // if the node is not in the cache, we
         // use the next_id as node id and identifier
@@ -239,7 +239,7 @@ mod tests {
     #[test_case("(a:A)", Node::new(0, "a", vec!["A"]) ; "full")]
     fn convert_node(input: &str, expected: Node) {
         let parse_node = input.parse::<ParseNode>().unwrap();
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         let node = graph_handler.convert_node(parse_node).unwrap();
 
         assert_eq!(*node, expected)
@@ -251,7 +251,7 @@ mod tests {
     #[test_case("-[r:R]->", Relationship::new("r", Some("R")) ; "full")]
     fn convert_relationship(input: &str, expected: Relationship) {
         let parse_relationship = input.parse::<ParseRelationship>().unwrap();
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         let relationship = graph_handler
             .convert_relationship(parse_relationship)
             .unwrap();
@@ -262,7 +262,7 @@ mod tests {
     #[test]
     fn convert_path() {
         let parse_path = "(a)-[r1]->(b)<-[r2]-(a)".parse::<ParsePath>().unwrap();
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         graph_handler.convert_path(parse_path).unwrap();
 
         let node_a = graph_handler.node_cache.get("a").unwrap();
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn convert_graph() {
         let parse_graph = "(a)-[r1]->(b),(b)<-[r2]-(a)".parse::<ParseGraph>().unwrap();
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         graph_handler.convert_graph(parse_graph).unwrap();
 
         let node_a = graph_handler.node_cache.get("a").unwrap();
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn get_node() {
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         graph_handler.parse("(n0),(n1),()").unwrap();
 
         assert_eq!(graph_handler.node_count(), 3);
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn get_relationship() {
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         graph_handler.parse("()-->()-[r0]->()<-[r1]-()").unwrap();
 
         assert_eq!(graph_handler.relationship_count(), 3);
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn multiple_declarations_error() {
         let parse_path = "(a:A)-->(a:B)".parse::<ParsePath>().unwrap();
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         let error = graph_handler.convert_path(parse_path).unwrap_err();
 
         assert_eq!(
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn append_gdl() {
-        let mut graph_handler = GraphHandler::from("(a)").unwrap();
+        let mut graph_handler = GdlGraph::from("(a)").unwrap();
         graph_handler.parse("(a)-->(b)").unwrap();
         graph_handler.parse("(b)-->(c)").unwrap();
 
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn nodes_iterator() {
-        let graph_handler = GraphHandler::from("(a),(b),(c),(d),()").unwrap();
+        let graph_handler = GdlGraph::from("(a),(b),(c),(d),()").unwrap();
         let mut nodes = graph_handler
             .nodes()
             .map(|node| node.identifier.as_str())
@@ -348,7 +348,7 @@ mod tests {
 
     #[test]
     fn relationships_iterator() {
-        let graph_handler = GraphHandler::from("()-[r1]->()-[r2]->()-->()").unwrap();
+        let graph_handler = GdlGraph::from("()-[r1]->()-[r2]->()-->()").unwrap();
         let mut rels = graph_handler
             .relationships()
             .map(|rel| rel.identifier.as_str())
@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn invalid_reference_error() {
         let parse_path = "(a)-[r1]->(b)-[r1]->(c)".parse::<ParsePath>().unwrap();
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         let error = graph_handler.convert_path(parse_path).unwrap_err();
 
         assert_eq!(error, GraphHandlerError::InvalidReference("r1".to_string()));
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn parser_error() {
-        let mut graph_handler = GraphHandler::default();
+        let mut graph_handler = GdlGraph::default();
         let error = graph_handler.parse("(a)-->(42:A)").unwrap_err();
         assert_eq!(
             error,

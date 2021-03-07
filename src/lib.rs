@@ -1,3 +1,3 @@
 #![allow(dead_code)]
-pub mod handler;
+pub mod graph;
 mod parser;
