@@ -60,13 +60,19 @@ impl Relationship {
 }
 
 #[derive(Default)]
-struct GraphHandler {
+pub struct GraphHandler {
     token_cache: HashMap<String, Rc<String>>,
     node_cache: HashMap<String, Node>,
     relationship_cache: HashMap<String, Relationship>,
 }
 
 impl GraphHandler {
+    pub fn from(input: &str) -> Result<Self, GraphHandlerError> {
+        let mut graph_handler = Self::default();
+        graph_handler.parse(input)?;
+        Ok(graph_handler)
+    }
+
     pub fn parse(&mut self, input: &str) -> Result<(), GraphHandlerError> {
         let parse_graph = input.parse::<ParseGraph>()?;
         self.convert_graph(parse_graph)?;
@@ -87,6 +93,14 @@ impl GraphHandler {
 
     pub fn get_relationship(&self, identifier: &str) -> Option<&Relationship> {
         self.relationship_cache.get(identifier)
+    }
+
+    pub fn nodes(&self) -> impl Iterator<Item = &Node> {
+        self.node_cache.values()
+    }
+
+    pub fn relationships(&self) -> impl Iterator<Item = &Relationship> {
+        self.relationship_cache.values()
     }
 }
 
@@ -309,6 +323,38 @@ mod tests {
             error,
             GraphHandlerError::MultipleDeclarations("a".to_string())
         );
+    }
+
+    #[test]
+    fn append_gdl() {
+        let mut graph_handler = GraphHandler::from("(a)").unwrap();
+        graph_handler.parse("(a)-->(b)").unwrap();
+        graph_handler.parse("(b)-->(c)").unwrap();
+
+        assert_eq!(graph_handler.node_count(), 3);
+        assert_eq!(graph_handler.relationship_count(), 2);
+    }
+
+    #[test]
+    fn nodes_iterator() {
+        let graph_handler = GraphHandler::from("(a),(b),(c),(d),()").unwrap();
+        let mut nodes = graph_handler
+            .nodes()
+            .map(|node| node.identifier.as_str())
+            .collect::<Vec<_>>();
+        nodes.sort();
+        assert_eq!(nodes, vec!["__v4", "a", "b", "c", "d"]);
+    }
+
+    #[test]
+    fn relationships_iterator() {
+        let graph_handler = GraphHandler::from("()-[r1]->()-[r2]->()-->()").unwrap();
+        let mut rels = graph_handler
+            .relationships()
+            .map(|rel| rel.identifier.as_str())
+            .collect::<Vec<_>>();
+        rels.sort();
+        assert_eq!(rels, vec!["__r2", "r1", "r2"]);
     }
 
     #[test]
