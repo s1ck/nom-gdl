@@ -12,8 +12,10 @@ use crate::parser::{
 
 #[derive(Error, Debug, PartialEq)]
 pub enum GraphHandlerError {
-    #[error("multiple declaration of variable `{0}`")]
+    #[error("multiple declaration of node variable `{0}`")]
     MultipleDeclarations(String),
+    #[error("invalid reference of relationship variable `{0}`")]
+    InvalidReference(String),
     #[error("error during parsing")]
     Parser(#[from] nom::error::Error<String>),
 }
@@ -149,10 +151,8 @@ impl GraphHandler {
 
         match self.relationship_cache.entry(identifier) {
             Entry::Occupied(entry) => {
-                if parse_relationship.rel_type.is_some() {
-                    return Err(GraphHandlerError::MultipleDeclarations(entry.key().clone()));
-                }
-                Ok(entry.into_mut())
+                // Relationships can not be referenced multiple times.
+                Err(GraphHandlerError::InvalidReference(entry.key().clone()))
             }
             Entry::Vacant(entry) => {
                 let identifier = entry.key().clone();
@@ -309,6 +309,15 @@ mod tests {
             error,
             GraphHandlerError::MultipleDeclarations("a".to_string())
         );
+    }
+
+    #[test]
+    fn invalid_reference_error() {
+        let parse_path = "(a)-[r1]->(b)-[r1]->(c)".parse::<ParsePath>().unwrap();
+        let mut graph_handler = GraphHandler::default();
+        let error = graph_handler.convert_path(parse_path).unwrap_err();
+
+        assert_eq!(error, GraphHandlerError::InvalidReference("r1".to_string()));
     }
 
     #[test]
