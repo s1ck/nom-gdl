@@ -1,13 +1,14 @@
 use std::str::FromStr;
 
+use nom::character::complete::digit0;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
-    character::complete::{alpha1, alphanumeric1},
+    character::complete::{alpha1, alphanumeric1, digit1},
     combinator::{all_consuming, cut, map, opt, recognize},
     error::Error,
     multi::{many0, many1},
-    sequence::{delimited, pair, preceded, terminated},
+    sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult,
 };
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -189,6 +190,26 @@ impl FromStr for Graph {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum CypherValue {
+    Float(f64),
+    Integer(i64),
+}
+
+impl FromStr for CypherValue {
+    type Err = Error<String>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match all_consuming(cypher_value)(s).finish() {
+            Ok((_remainder, cypher_value)) => Ok(cypher_value),
+            Err(Error { input, code }) => Err(Error {
+                input: input.to_string(),
+                code,
+            }),
+        }
+    }
+}
+
 fn is_uppercase_alphabetic(c: char) -> bool {
     c.is_alphabetic() && c.is_uppercase()
 }
@@ -204,6 +225,37 @@ fn is_valid_rel_type_token(c: char) -> bool {
 fn sp(input: &str) -> IResult<&str, &str> {
     let chars = " \t\r\n";
     take_while(move |c| chars.contains(c))(input)
+}
+
+fn neg_sign(input: &str) -> IResult<&str, bool> {
+    map(opt(tag("-")), |t| t.is_some())(input)
+}
+
+fn integer_literal(input: &str) -> IResult<&str, CypherValue> {
+    map(pair(neg_sign, digit1), |(is_negative, num)| {
+        let mut num = i64::from_str(num).unwrap();
+        if is_negative {
+            num = -num;
+        }
+        CypherValue::Integer(num)
+    })(input)
+}
+
+fn float_literal(input: &str) -> IResult<&str, CypherValue> {
+    map(
+        pair(neg_sign, recognize(tuple((digit0, tag("."), digit0)))),
+        |(is_negative, num)| {
+            let mut num = f64::from_str(num).unwrap();
+            if is_negative {
+                num = -num;
+            }
+            CypherValue::Float(num)
+        },
+    )(input)
+}
+
+fn cypher_value(input: &str) -> IResult<&str, CypherValue> {
+    preceded(sp, alt((float_literal, integer_literal)))(input)
 }
 
 fn identifier(input: &str) -> IResult<&str, String> {
@@ -293,6 +345,21 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq as pretty_assert_eq;
     use test_case::test_case;
+
+    #[test_case("0",     CypherValue::Integer(0)   ; "int: zero")]
+    #[test_case("-0",    CypherValue::Integer(0)   ; "int: signed zero")]
+    #[test_case("42",    CypherValue::Integer(42)  ; "int: positive")]
+    #[test_case("-42",   CypherValue::Integer(-42) ; "int: negative")]
+    #[test_case("0.0",   CypherValue::Float(0.0)   ; "float: zero v1")]
+    #[test_case("0.",    CypherValue::Float(0.0)   ; "float: zero v2")]
+    #[test_case(".0",    CypherValue::Float(0.0)   ; "float: zero v3")]
+    #[test_case("-0.0",  CypherValue::Float(0.0)   ; "float: signed zero")]
+    #[test_case("-.0",   CypherValue::Float(0.0)   ; "float: signed zero v2")]
+    #[test_case("13.37", CypherValue::Float(13.37) ; "float: positive")]
+    #[test_case("-42.2", CypherValue::Float(-42.2) ; "float: negative")]
+    fn cypher_value(input: &str, expected: CypherValue) {
+        assert_eq!(input.parse(), Ok(expected))
+    }
 
     #[test_case("foobar"; "multiple alphabetical")]
     #[test_case("_foobar"; "starts with underscore")]
