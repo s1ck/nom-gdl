@@ -3,7 +3,7 @@ use std::str::FromStr;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
-    character::complete::{alpha1, alphanumeric1, multispace0},
+    character::complete::{alpha1, alphanumeric1},
     combinator::{all_consuming, cut, map, opt, recognize},
     error::Error,
     multi::{many0, many1},
@@ -201,6 +201,11 @@ fn is_valid_rel_type_token(c: char) -> bool {
     is_uppercase_alphabetic(c) || c.is_numeric() || c == '_'
 }
 
+fn sp(input: &str) -> IResult<&str, &str> {
+    let chars = " \t\r\n";
+    take_while(move |c| chars.contains(c))(input)
+}
+
 fn identifier(input: &str) -> IResult<&str, String> {
     map(
         recognize(pair(
@@ -238,7 +243,7 @@ fn rel_type(input: &str) -> IResult<&str, String> {
 }
 
 fn node_body(input: &str) -> IResult<&str, (Option<String>, Vec<String>)> {
-    pair(opt(identifier), many0(label))(input)
+    delimited(sp, pair(opt(identifier), many0(label)), sp)(input)
 }
 
 pub(crate) fn node(input: &str) -> IResult<&str, Node> {
@@ -246,7 +251,11 @@ pub(crate) fn node(input: &str) -> IResult<&str, Node> {
 }
 
 fn relationship_body(input: &str) -> IResult<&str, (Option<String>, Option<String>)> {
-    delimited(tag("["), pair(opt(identifier), opt(rel_type)), tag("]"))(input)
+    delimited(
+        tag("["),
+        delimited(sp, pair(opt(identifier), opt(rel_type)), sp),
+        tag("]"),
+    )(input)
 }
 
 pub(crate) fn relationship(input: &str) -> IResult<&str, Relationship> {
@@ -274,10 +283,7 @@ pub(crate) fn path(input: &str) -> IResult<&str, Path> {
 
 pub(crate) fn graph(input: &str) -> IResult<&str, Graph> {
     map(
-        many1(terminated(
-            preceded(multispace0, path),
-            preceded(multispace0, opt(tag(","))),
-        )),
+        many1(terminated(preceded(sp, path), preceded(sp, opt(tag(","))))),
         Graph::new,
     )(input)
 }
@@ -338,126 +344,82 @@ mod tests {
         assert_eq!(format!(":{}", result), input)
     }
 
-    #[test]
-    fn node_empty() {
-        assert_eq!("()".parse(), Ok(Node::default()))
+    #[test_case("()"; "empty node")]
+    #[test_case("( )"; "empty node with space")]
+    #[test_case("(  )"; "empty node with many spaces")]
+    fn node_empty(input: &str) {
+        assert_eq!(input.parse(), Ok(Node::default()))
     }
 
-    #[test]
-    fn node_with_identifier() {
-        assert_eq!(
-            "(n0)".parse(),
-            Ok(Node {
-                identifier: Some("n0".to_string()),
-                ..Node::default()
-            })
-        );
+    #[test_case("(n0)",   Node { identifier: Some("n0".to_string()), ..Node::default() }; "n0")]
+    #[test_case("(n1)",   Node { identifier: Some("n1".to_string()), ..Node::default() }; "n1")]
+    #[test_case("( n0 )", Node { identifier: Some("n0".to_string()), ..Node::default() }; "n0 with space")]
+    fn node_with_identifier(input: &str, expected: Node) {
+        assert_eq!(input.parse(), Ok(expected));
     }
-    #[test]
-    fn node_with_labels() {
-        assert_eq!(
-            "(:A)".parse(),
-            Ok(Node {
-                labels: vec!["A".to_string()],
-                ..Node::default()
-            })
-        );
-        assert_eq!(
-            "(:A:B)".parse(),
-            Ok(Node {
-                labels: vec!["A".to_string(), "B".to_string()],
-                ..Node::default()
-            })
-        );
+    #[test_case("(:A)",     Node { labels: vec!["A".to_string()], ..Node::default() }; "single label" )]
+    #[test_case("(:A:B)",   Node { labels: vec!["A".to_string(), "B".to_string()], ..Node::default() }; "multiple labels" )]
+    #[test_case("( :A:B )", Node { labels: vec!["A".to_string(), "B".to_string()], ..Node::default() }; "multiple labels with space" )]
+    fn node_with_labels(input: &str, expected: Node) {
+        assert_eq!(input.parse(), Ok(expected));
     }
 
-    #[test]
-    fn node_full() {
-        assert_eq!(
-            "(n0:A)".parse(),
-            Ok(Node {
-                identifier: Some("n0".to_string()),
-                labels: vec!["A".to_string()],
-            })
-        );
-        assert_eq!(
-            "(n0:A:B)".parse(),
-            Ok(Node {
-                identifier: Some("n0".to_string()),
-                labels: vec!["A".to_string(), "B".to_string()],
-            })
-        );
+    #[test_case("(n0:A)",     Node { identifier: Some("n0".to_string()), labels: vec!["A".to_string()], }; "single label")]
+    #[test_case("(n0:A:B)",   Node { identifier: Some("n0".to_string()), labels: vec!["A".to_string(), "B".to_string()], }; "multiple labels")]
+    #[test_case("( n0:A:B )", Node { identifier: Some("n0".to_string()), labels: vec!["A".to_string(), "B".to_string()], }; "multiple labels with space")]
+    fn node_full(input: &str, expected: Node) {
+        assert_eq!(input.parse(), Ok(expected));
     }
 
     #[test_case("(42:A)" ; "numeric identifier")]
+    #[test_case("("      ; "no closing")]
+    #[test_case(")"      ; "no opening")]
     fn node_negative(input: &str) {
         assert!(input.parse::<Node>().is_err())
     }
 
-    #[test]
-    fn relationship_empty() {
-        assert_eq!("-->".parse(), Ok(Relationship::outgoing(None, None)));
-        assert_eq!("-[]->".parse(), Ok(Relationship::outgoing(None, None)));
-        assert_eq!("<--".parse(), Ok(Relationship::incoming(None, None)));
-        assert_eq!("<-[]-".parse(), Ok(Relationship::incoming(None, None)));
+    #[test_case("-->",    Relationship::outgoing(None, None); "outgoing: no body")]
+    #[test_case("-[]->",  Relationship::outgoing(None, None); "outgoing: with body")]
+    #[test_case("-[ ]->", Relationship::outgoing(None, None); "outgoing: body with space")]
+    #[test_case("<--",    Relationship::incoming(None, None); "incoming: no body")]
+    #[test_case("<-[]-",  Relationship::incoming(None, None); "incoming: with body")]
+    #[test_case("<-[ ]-", Relationship::incoming(None, None); "incoming: body with space")]
+    fn relationship_empty(input: &str, expected: Relationship) {
+        assert_eq!(input.parse(), Ok(expected));
     }
 
-    #[test]
-    fn relationship_with_identifier() {
-        assert_eq!(
-            "-[r0]->".parse(),
-            Ok(Relationship {
-                identifier: Some("r0".to_string()),
-                ..Relationship::default()
-            })
-        );
-        assert_eq!(
-            "<-[r0]-".parse(),
-            Ok(Relationship {
-                identifier: Some("r0".to_string()),
-                direction: Direction::Incoming,
-                ..Relationship::default()
-            })
-        );
+    #[test_case("-[->" ; "outgoing: no closing")]
+    #[test_case("-]->" ; "outgoing: no opening")]
+    #[test_case("->"   ; "outgoing: no hyphen")]
+    #[test_case("<-[-" ; "incoming: no closing")]
+    #[test_case("<-]-" ; "incoming: no opening")]
+    #[test_case("<-"   ; "incoming: no hyphen")]
+    fn relationship_negative(input: &str) {
+        assert!(input.parse::<Relationship>().is_err());
     }
 
-    #[test]
-    fn relationship_with_rel_type() {
-        assert_eq!(
-            "-[:BAR]->".parse(),
-            Ok(Relationship {
-                rel_type: Some("BAR".to_string()),
-                ..Relationship::default()
-            })
-        );
-        assert_eq!(
-            "<-[:BAR]-".parse(),
-            Ok(Relationship {
-                rel_type: Some("BAR".to_string()),
-                direction: Direction::Incoming,
-                ..Relationship::default()
-            })
-        );
+    #[test_case("-[r0]->",   Relationship { identifier: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "outgoing")]
+    #[test_case("-[ r0 ]->", Relationship { identifier: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "outgoing with space")]
+    #[test_case("<-[r0]-",   Relationship { identifier: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "incoming")]
+    #[test_case("<-[ r0 ]-", Relationship { identifier: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "incoming with space")]
+    fn relationship_with_identifier(input: &str, expected: Relationship) {
+        assert_eq!(input.parse(), Ok(expected));
     }
 
-    #[test]
-    fn relationship_full() {
-        assert_eq!(
-            "-[r0:BAR]->".parse(),
-            Ok(Relationship {
-                identifier: Some("r0".to_string()),
-                rel_type: Some("BAR".to_string()),
-                direction: Direction::Outgoing,
-            })
-        );
-        assert_eq!(
-            "<-[r0:BAR]-".parse(),
-            Ok(Relationship {
-                identifier: Some("r0".to_string()),
-                rel_type: Some("BAR".to_string()),
-                direction: Direction::Incoming,
-            })
-        )
+    #[test_case("-[:BAR]->",   Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "outgoing")]
+    #[test_case("-[ :BAR ]->", Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "outgoing with space")]
+    #[test_case("<-[:BAR]-",   Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "incoming")]
+    #[test_case("<-[ :BAR ]-", Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "incoming with space")]
+    fn relationship_with_rel_type(input: &str, expected: Relationship) {
+        assert_eq!(input.parse(), Ok(expected));
+    }
+
+    #[test_case("-[r0:BAR]->", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, }; "outgoing")]
+    #[test_case("-[ r0:BAR ]->", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, }; "outgoing with space")]
+    #[test_case("<-[r0:BAR]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, }; "incoming")]
+    #[test_case("<-[ r0:BAR ]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, }; "incoming with space")]
+    fn relationship_full(input: &str, expected: Relationship) {
+        assert_eq!(input.parse(), Ok(expected));
     }
 
     #[test]
