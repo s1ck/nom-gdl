@@ -223,8 +223,7 @@ fn is_valid_rel_type_token(c: char) -> bool {
 }
 
 fn sp(input: &str) -> IResult<&str, &str> {
-    let chars = " \t\r\n";
-    take_while(move |c| chars.contains(c))(input)
+    take_while(|c: char| c.is_ascii_whitespace())(input)
 }
 
 fn neg_sign(input: &str) -> IResult<&str, bool> {
