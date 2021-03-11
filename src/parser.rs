@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use nom::character::complete::digit0;
 use nom::{
@@ -259,11 +259,42 @@ fn cypher_value(input: &str) -> IResult<&str, CypherValue> {
 
 fn identifier(input: &str) -> IResult<&str, String> {
     map(
-        recognize(pair(
-            alt((alpha1, tag("_"))),
-            many0(alt((alphanumeric1, tag("_")))),
-        )),
+        preceded(
+            sp,
+            recognize(pair(
+                alt((alpha1, tag("_"))),
+                many0(alt((alphanumeric1, tag("_")))),
+            )),
+        ),
         String::from,
+    )(input)
+}
+
+fn key_value_pair(input: &str) -> IResult<&str, (String, CypherValue)> {
+    pair(
+        identifier,
+        preceded(preceded(sp, tag(":")), cut(cypher_value)),
+    )(input)
+}
+
+fn key_value_pairs(input: &str) -> IResult<&str, HashMap<String, CypherValue>> {
+    map(
+        pair(
+            key_value_pair,
+            many0(preceded(preceded(sp, tag(",")), key_value_pair)),
+        ),
+        |(head, tail)| std::iter::once(head).chain(tail).collect::<HashMap<_, _>>(),
+    )(input)
+}
+
+fn properties(input: &str) -> IResult<&str, HashMap<String, CypherValue>> {
+    map(
+        delimited(
+            preceded(sp, tag("{")),
+            opt(key_value_pairs),
+            preceded(sp, tag("}")),
+        ),
+        |properties| properties.unwrap_or_default(),
     )(input)
 }
 
@@ -358,6 +389,21 @@ mod tests {
     #[test_case("-42.2", CypherValue::Float(-42.2) ; "float: negative")]
     fn cypher_value(input: &str, expected: CypherValue) {
         assert_eq!(input.parse(), Ok(expected))
+    }
+
+    #[test_case("key:42",     ("key".to_string(), CypherValue::Integer(42)))]
+    #[test_case("key: 1337",  ("key".to_string(), CypherValue::Integer(1337)))]
+    #[test_case("key2: 1337", ("key2".to_string(), CypherValue::Integer(1337)))]
+    fn key_value_pair_test(input: &str, expected: (String, CypherValue)) {
+        assert_eq!(key_value_pair(input).unwrap().1, expected)
+    }
+
+    #[test_case("{key1: 42}", vec![("key1".to_string(), CypherValue::Integer(42))])]
+    #[test_case("{key1: 13.37 }", vec![("key1".to_string(), CypherValue::Float(13.37))])]
+    #[test_case("{ key1: 42, key2: 1337 }", vec![("key1".to_string(), CypherValue::Integer(42)), ("key2".to_string(), CypherValue::Integer(1337))])]
+    fn properties_test(input: &str, expected: Vec<(String, CypherValue)>) {
+        let expected = expected.into_iter().collect::<HashMap<_, _>>();
+        assert_eq!(properties(input).unwrap().1, expected)
     }
 
     #[test_case("foobar"; "multiple alphabetical")]
