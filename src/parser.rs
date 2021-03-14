@@ -11,39 +11,46 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult,
 };
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct Node {
     pub(crate) identifier: Option<String>,
     pub(crate) labels: Vec<String>,
+    pub(crate) properties: HashMap<String, CypherValue>,
 }
 
 impl Node {
-    pub fn new(identifier: Option<String>, labels: Vec<String>) -> Self {
-        Self { identifier, labels }
-    }
-
-    fn with_identifier(identifier: impl Into<String>) -> Self {
-        Node {
-            identifier: Some(identifier.into()),
-            labels: vec![],
-        }
-    }
-
-    fn with_identifier_and_labels<I, T>(identifier: impl Into<String>, labels: I) -> Self
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<String>,
-    {
-        Node {
-            identifier: Some(identifier.into()),
-            labels: labels.into_iter().map(Into::into).collect(),
+    pub fn new(
+        identifier: Option<String>,
+        labels: Vec<String>,
+        properties: HashMap<String, CypherValue>,
+    ) -> Self {
+        Self {
+            identifier,
+            labels,
+            properties,
         }
     }
 }
 
-impl From<(Option<String>, Vec<String>)> for Node {
-    fn from((identifier, labels): (Option<String>, Vec<String>)) -> Self {
-        Node { identifier, labels }
+impl
+    From<(
+        Option<String>,
+        Vec<String>,
+        Option<HashMap<String, CypherValue>>,
+    )> for Node
+{
+    fn from(
+        (identifier, labels, properties): (
+            Option<String>,
+            Vec<String>,
+            Option<HashMap<String, CypherValue>>,
+        ),
+    ) -> Self {
+        Node {
+            identifier,
+            labels,
+            properties: properties.unwrap_or_default(),
+        }
     }
 }
 
@@ -133,7 +140,7 @@ impl FromStr for Relationship {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Debug, PartialEq, Default)]
 pub(crate) struct Path {
     pub(crate) start: Node,
     pub(crate) elements: Vec<(Relationship, Node)>,
@@ -165,7 +172,7 @@ impl FromStr for Path {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Debug, PartialEq, Default)]
 pub(crate) struct Graph {
     pub(crate) paths: Vec<Path>,
 }
@@ -324,8 +331,21 @@ fn rel_type(input: &str) -> IResult<&str, String> {
     )(input)
 }
 
-fn node_body(input: &str) -> IResult<&str, (Option<String>, Vec<String>)> {
-    delimited(sp, pair(opt(identifier), many0(label)), sp)(input)
+fn node_body(
+    input: &str,
+) -> IResult<
+    &str,
+    (
+        Option<String>,
+        Vec<String>,
+        Option<HashMap<String, CypherValue>>,
+    ),
+> {
+    delimited(
+        sp,
+        tuple((opt(identifier), many0(label), opt(properties))),
+        sp,
+    )(input)
 }
 
 pub(crate) fn node(input: &str) -> IResult<&str, Node> {
@@ -375,6 +395,57 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq as pretty_assert_eq;
     use test_case::test_case;
+
+    impl Node {
+        fn with_identifier(identifier: impl Into<String>) -> Self {
+            Node {
+                identifier: Some(identifier.into()),
+                ..Node::default()
+            }
+        }
+
+        fn with_labels<I, T>(labels: I) -> Self
+        where
+            I: IntoIterator<Item = T>,
+            T: Into<String>,
+        {
+            Node {
+                labels: labels.into_iter().map(Into::into).collect(),
+                ..Node::default()
+            }
+        }
+
+        fn with_identifier_and_labels<I, T>(identifier: impl Into<String>, labels: I) -> Self
+        where
+            I: IntoIterator<Item = T>,
+            T: Into<String>,
+        {
+            Node {
+                identifier: Some(identifier.into()),
+                labels: labels.into_iter().map(Into::into).collect(),
+                ..Node::default()
+            }
+        }
+
+        fn from<I, T>(
+            identifier: impl Into<String>,
+            labels: I,
+            properties: Vec<(T, CypherValue)>,
+        ) -> Self
+        where
+            I: IntoIterator<Item = T>,
+            T: Into<String>,
+        {
+            Node {
+                identifier: Some(identifier.into()),
+                labels: labels.into_iter().map(Into::into).collect(),
+                properties: properties
+                    .into_iter()
+                    .map(|(k, v)| (Into::into(k), v))
+                    .collect::<HashMap<_, _>>(),
+            }
+        }
+    }
 
     #[test_case("0",     CypherValue::Integer(0)   ; "int: zero")]
     #[test_case("-0",    CypherValue::Integer(0)   ; "int: signed zero")]
@@ -456,30 +527,20 @@ mod tests {
         assert_eq!(format!(":{}", result), input)
     }
 
-    #[test_case("()"; "empty node")]
-    #[test_case("( )"; "empty node with space")]
-    #[test_case("(  )"; "empty node with many spaces")]
-    fn node_empty(input: &str) {
-        assert_eq!(input.parse(), Ok(Node::default()))
-    }
-
-    #[test_case("(n0)",   Node { identifier: Some("n0".to_string()), ..Node::default() }; "n0")]
-    #[test_case("(n1)",   Node { identifier: Some("n1".to_string()), ..Node::default() }; "n1")]
-    #[test_case("( n0 )", Node { identifier: Some("n0".to_string()), ..Node::default() }; "n0 with space")]
-    fn node_with_identifier(input: &str, expected: Node) {
-        assert_eq!(input.parse(), Ok(expected));
-    }
-    #[test_case("(:A)",     Node { labels: vec!["A".to_string()], ..Node::default() }; "single label" )]
-    #[test_case("(:A:B)",   Node { labels: vec!["A".to_string(), "B".to_string()], ..Node::default() }; "multiple labels" )]
-    #[test_case("( :A:B )", Node { labels: vec!["A".to_string(), "B".to_string()], ..Node::default() }; "multiple labels with space" )]
-    fn node_with_labels(input: &str, expected: Node) {
-        assert_eq!(input.parse(), Ok(expected));
-    }
-
-    #[test_case("(n0:A)",     Node { identifier: Some("n0".to_string()), labels: vec!["A".to_string()], }; "single label")]
-    #[test_case("(n0:A:B)",   Node { identifier: Some("n0".to_string()), labels: vec!["A".to_string(), "B".to_string()], }; "multiple labels")]
-    #[test_case("( n0:A:B )", Node { identifier: Some("n0".to_string()), labels: vec!["A".to_string(), "B".to_string()], }; "multiple labels with space")]
-    fn node_full(input: &str, expected: Node) {
+    #[test_case("()",                   Node::default(); "empty node")]
+    #[test_case("( )",                  Node::default(); "empty node with space")]
+    #[test_case("(  )",                 Node::default(); "empty node with many spaces")]
+    #[test_case("(n0)",                 Node::with_identifier("n0"); "n0")]
+    #[test_case("( n0 )",               Node::with_identifier("n0"); "n0 with space")]
+    #[test_case("(:A)",                 Node::with_labels(vec!["A"]))]
+    #[test_case("(:A:B)",               Node::with_labels(vec!["A", "B"]) )]
+    #[test_case("( :A:B )",             Node::with_labels(vec!["A", "B"]); "multiple labels with space" )]
+    #[test_case("(n0:A)",               Node::with_identifier_and_labels("n0", vec!["A"]))]
+    #[test_case("(n0:A:B)",             Node::with_identifier_and_labels("n0", vec!["A", "B"]))]
+    #[test_case("( n0:A:B )",           Node::with_identifier_and_labels("n0", vec!["A", "B"]); "n0 + multiple labels with space")]
+    #[test_case("(n0 { foo: 42 })",     Node::from("n0", vec![], vec![("foo", CypherValue::Integer(42))]))]
+    #[test_case("(n0:A:B { foo: 42 })", Node::from("n0", vec!["A", "B"], vec![("foo", CypherValue::Integer(42))]))]
+    fn node_test(input: &str, expected: Node) {
         assert_eq!(input.parse(), Ok(expected));
     }
 
@@ -526,9 +587,9 @@ mod tests {
         assert_eq!(input.parse(), Ok(expected));
     }
 
-    #[test_case("-[r0:BAR]->", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, }; "outgoing")]
+    #[test_case("-[r0:BAR]->",   Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, }; "outgoing")]
     #[test_case("-[ r0:BAR ]->", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, }; "outgoing with space")]
-    #[test_case("<-[r0:BAR]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, }; "incoming")]
+    #[test_case("<-[r0:BAR]-",   Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, }; "incoming")]
     #[test_case("<-[ r0:BAR ]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, }; "incoming with space")]
     fn relationship_full(input: &str, expected: Relationship) {
         assert_eq!(input.parse(), Ok(expected));
@@ -588,7 +649,7 @@ mod tests {
                 elements: vec![
                     (
                         Relationship::incoming(None, Some("R".to_string())),
-                        Node::new(None, vec!["B".to_string()])
+                        Node::new(None, vec!["B".to_string()], HashMap::default())
                     ),
                     (
                         Relationship::outgoing_with_identifier("rel"),
@@ -600,7 +661,11 @@ mod tests {
                     ),
                     (
                         Relationship::incoming(None, None),
-                        Node::new(None, vec!["E1".to_string(), "E2".to_string()])
+                        Node::new(
+                            None,
+                            vec!["E1".to_string(), "E2".to_string()],
+                            HashMap::default()
+                        )
                     ),
                     (
                         Relationship::outgoing_with_identifier_and_rel_type("r", "REL"),
