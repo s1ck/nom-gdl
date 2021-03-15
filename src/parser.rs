@@ -95,34 +95,12 @@ impl Relationship {
         }
     }
 
-    fn outgoing_with_identifier(identifier: impl Into<String>) -> Self {
-        Self::outgoing(Some(identifier.into()), None)
-    }
-
-    fn outgoing_with_identifier_and_rel_type(
-        identifier: impl Into<String>,
-        rel_type: impl Into<String>,
-    ) -> Self {
-        Self::outgoing(Some(identifier.into()), Some(rel_type.into()))
-    }
-
     fn incoming(identifier: Option<String>, rel_type: Option<String>) -> Self {
         Relationship {
             identifier,
             rel_type,
             direction: Direction::Incoming,
         }
-    }
-
-    fn incoming_with_identifier(identifier: impl Into<String>) -> Self {
-        Self::incoming(Some(identifier.into()), None)
-    }
-
-    fn incoming_with_identifier_and_rel_type(
-        identifier: impl Into<String>,
-        rel_type: impl Into<String>,
-    ) -> Self {
-        Self::incoming(Some(identifier.into()), Some(rel_type.into()))
     }
 }
 
@@ -444,6 +422,30 @@ mod tests {
                     .map(|(k, v)| (Into::into(k), v))
                     .collect::<HashMap<_, _>>(),
             }
+        }
+    }
+
+    impl Relationship {
+        fn outgoing_with_identifier(identifier: impl Into<String>) -> Self {
+            Self::outgoing(Some(identifier.into()), None)
+        }
+
+        fn outgoing_with_identifier_and_rel_type(
+            identifier: impl Into<String>,
+            rel_type: impl Into<String>,
+        ) -> Self {
+            Self::outgoing(Some(identifier.into()), Some(rel_type.into()))
+        }
+
+        fn incoming_with_identifier(identifier: impl Into<String>) -> Self {
+            Self::incoming(Some(identifier.into()), None)
+        }
+
+        fn incoming_with_identifier_and_rel_type(
+            identifier: impl Into<String>,
+            rel_type: impl Into<String>,
+        ) -> Self {
+            Self::incoming(Some(identifier.into()), Some(rel_type.into()))
         }
     }
 
