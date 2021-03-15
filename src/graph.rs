@@ -6,7 +6,7 @@ use std::{
 use thiserror::Error;
 
 use crate::parser::{
-    Direction, Graph as ParseGraph, Node as ParseNode, Path as ParsePath,
+    CypherValue, Direction, Graph as ParseGraph, Node as ParseNode, Path as ParsePath,
     Relationship as ParseRelationship,
 };
 
@@ -20,21 +20,31 @@ pub enum GraphHandlerError {
     Parser(#[from] nom::error::Error<String>),
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Node {
     id: usize,
     identifier: String,
     labels: Vec<Rc<String>>,
+    properties: HashMap<String, CypherValue>,
 }
 
 impl Node {
-    fn new(id: usize, identifier: &str, labels: Vec<impl Into<String>>) -> Self {
+    fn new(
+        id: usize,
+        identifier: &str,
+        labels: Vec<impl Into<String>>,
+        properties: HashMap<impl Into<String>, CypherValue>,
+    ) -> Self {
         Self {
             id,
             identifier: identifier.to_string(),
             labels: labels
                 .into_iter()
                 .map(|label| Rc::new(label.into()))
+                .collect(),
+            properties: properties
+                .into_iter()
+                .map(|(k, v)| (Into::into(k), v))
                 .collect(),
         }
     }
@@ -143,6 +153,7 @@ impl GdlGraph {
                     id: next_id,
                     identifier,
                     labels,
+                    properties: parse_node.properties,
                 };
 
                 Ok(entry.insert(new_node))
@@ -233,10 +244,11 @@ mod tests {
     use nom::error::ErrorKind;
     use test_case::test_case;
 
-    #[test_case("()", Node::new(0, "__v0", Vec::<String>::new()) ; "empty")]
-    #[test_case("(a)", Node::new(0, "a", Vec::<String>::new()) ; "identifier only")]
-    #[test_case("(:A)", Node::new(0, "__v0", vec!["A"]) ; "label only")]
-    #[test_case("(a:A)", Node::new(0, "a", vec!["A"]) ; "full")]
+    #[test_case("()", Node::new(0, "__v0", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "empty")]
+    #[test_case("(a)", Node::new(0, "a", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "identifier only")]
+    #[test_case("(:A)", Node::new(0, "__v0", vec!["A"], HashMap::<String, CypherValue>::new()) ; "label only")]
+    #[test_case("(a:A)", Node::new(0, "a", vec!["A"], HashMap::<String, CypherValue>::new()) ; "identifier and label")]
+    #[test_case("(a:A { foo: 42 })", Node::new(0, "a", vec!["A"], std::iter::once(("foo", CypherValue::Integer(42))).collect::<HashMap<_,_>>()); "full")]
     fn convert_node(input: &str, expected: Node) {
         let parse_node = input.parse::<ParseNode>().unwrap();
         let mut graph_handler = GdlGraph::default();
