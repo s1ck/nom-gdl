@@ -68,11 +68,12 @@ impl FromStr for Node {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct Relationship {
     pub(crate) identifier: Option<String>,
     pub(crate) rel_type: Option<String>,
     pub(crate) direction: Direction,
+    pub(crate) properties: HashMap<String, CypherValue>,
 }
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub(crate) enum Direction {
@@ -87,19 +88,29 @@ impl Default for Direction {
 }
 
 impl Relationship {
-    fn outgoing(identifier: Option<String>, rel_type: Option<String>) -> Self {
+    fn outgoing(
+        identifier: Option<String>,
+        rel_type: Option<String>,
+        properties: HashMap<String, CypherValue>,
+    ) -> Self {
         Relationship {
             identifier,
             rel_type,
             direction: Direction::Outgoing,
+            properties,
         }
     }
 
-    fn incoming(identifier: Option<String>, rel_type: Option<String>) -> Self {
+    fn incoming(
+        identifier: Option<String>,
+        rel_type: Option<String>,
+        properties: HashMap<String, CypherValue>,
+    ) -> Self {
         Relationship {
             identifier,
             rel_type,
             direction: Direction::Incoming,
+            properties,
         }
     }
 }
@@ -330,10 +341,23 @@ pub(crate) fn node(input: &str) -> IResult<&str, Node> {
     map(delimited(tag("("), node_body, tag(")")), Node::from)(input)
 }
 
-fn relationship_body(input: &str) -> IResult<&str, (Option<String>, Option<String>)> {
+fn relationship_body(
+    input: &str,
+) -> IResult<
+    &str,
+    (
+        Option<String>,
+        Option<String>,
+        Option<HashMap<String, CypherValue>>,
+    ),
+> {
     delimited(
         tag("["),
-        delimited(sp, pair(opt(identifier), opt(rel_type)), sp),
+        delimited(
+            sp,
+            tuple((opt(identifier), opt(rel_type), opt(properties))),
+            sp,
+        ),
         tag("]"),
     )(input)
 }
@@ -343,15 +367,19 @@ pub(crate) fn relationship(input: &str) -> IResult<&str, Relationship> {
         map(
             delimited(tag("-"), opt(relationship_body), tag("->")),
             |relationship| match relationship {
-                Some((identifier, rel_type)) => Relationship::outgoing(identifier, rel_type),
-                None => Relationship::outgoing(None, None),
+                Some((identifier, rel_type, properties)) => {
+                    Relationship::outgoing(identifier, rel_type, properties.unwrap_or_default())
+                }
+                None => Relationship::outgoing(None, None, HashMap::default()),
             },
         ),
         map(
             delimited(tag("<-"), opt(relationship_body), tag("-")),
             |relationship| match relationship {
-                Some((identifier, rel_type)) => Relationship::incoming(identifier, rel_type),
-                None => Relationship::incoming(None, None),
+                Some((identifier, rel_type, properties)) => {
+                    Relationship::incoming(identifier, rel_type, properties.unwrap_or_default())
+                }
+                None => Relationship::incoming(None, None, HashMap::default()),
             },
         ),
     ))(input)
@@ -427,25 +455,53 @@ mod tests {
 
     impl Relationship {
         fn outgoing_with_identifier(identifier: impl Into<String>) -> Self {
-            Self::outgoing(Some(identifier.into()), None)
+            Self::outgoing(Some(identifier.into()), None, HashMap::default())
         }
 
         fn outgoing_with_identifier_and_rel_type(
             identifier: impl Into<String>,
             rel_type: impl Into<String>,
         ) -> Self {
-            Self::outgoing(Some(identifier.into()), Some(rel_type.into()))
+            Self::outgoing(
+                Some(identifier.into()),
+                Some(rel_type.into()),
+                HashMap::default(),
+            )
         }
 
         fn incoming_with_identifier(identifier: impl Into<String>) -> Self {
-            Self::incoming(Some(identifier.into()), None)
+            Self::incoming(Some(identifier.into()), None, HashMap::default())
         }
 
         fn incoming_with_identifier_and_rel_type(
             identifier: impl Into<String>,
             rel_type: impl Into<String>,
         ) -> Self {
-            Self::incoming(Some(identifier.into()), Some(rel_type.into()))
+            Self::incoming(
+                Some(identifier.into()),
+                Some(rel_type.into()),
+                HashMap::default(),
+            )
+        }
+
+        fn from<I, T>(
+            identifier: impl Into<String>,
+            rel_type: T,
+            direction: Direction,
+            properties: Vec<(T, CypherValue)>,
+        ) -> Self
+        where
+            T: Into<String>,
+        {
+            Relationship {
+                identifier: Some(identifier.into()),
+                rel_type: Some(rel_type.into()),
+                direction,
+                properties: properties
+                    .into_iter()
+                    .map(|(k, v)| (Into::into(k), v))
+                    .collect::<HashMap<_, _>>(),
+            }
         }
     }
 
@@ -471,8 +527,8 @@ mod tests {
         assert_eq!(key_value_pair(input).unwrap().1, expected)
     }
 
-    #[test_case("{key1: 42}", vec![("key1".to_string(), CypherValue::Integer(42))])]
-    #[test_case("{key1: 13.37 }", vec![("key1".to_string(), CypherValue::Float(13.37))])]
+    #[test_case("{key1: 42}",               vec![("key1".to_string(), CypherValue::Integer(42))])]
+    #[test_case("{key1: 13.37 }",           vec![("key1".to_string(), CypherValue::Float(13.37))])]
     #[test_case("{ key1: 42, key2: 1337 }", vec![("key1".to_string(), CypherValue::Integer(42)), ("key2".to_string(), CypherValue::Integer(1337))])]
     fn properties_test(input: &str, expected: Vec<(String, CypherValue)>) {
         let expected = expected.into_iter().collect::<HashMap<_, _>>();
@@ -536,10 +592,10 @@ mod tests {
     #[test_case("( n0 )",               Node::with_identifier("n0"); "n0 with space")]
     #[test_case("(:A)",                 Node::with_labels(vec!["A"]))]
     #[test_case("(:A:B)",               Node::with_labels(vec!["A", "B"]) )]
-    #[test_case("( :A:B )",             Node::with_labels(vec!["A", "B"]); "multiple labels with space" )]
+    #[test_case("( :A:B )",             Node::with_labels(vec!["A", "B"]); ":A:B with space" )]
     #[test_case("(n0:A)",               Node::with_identifier_and_labels("n0", vec!["A"]))]
     #[test_case("(n0:A:B)",             Node::with_identifier_and_labels("n0", vec!["A", "B"]))]
-    #[test_case("( n0:A:B )",           Node::with_identifier_and_labels("n0", vec!["A", "B"]); "n0 + multiple labels with space")]
+    #[test_case("( n0:A:B )",           Node::with_identifier_and_labels("n0", vec!["A", "B"]); "n0:A:B with space")]
     #[test_case("(n0 { foo: 42 })",     Node::from("n0", vec![], vec![("foo", CypherValue::Integer(42))]))]
     #[test_case("(n0:A:B { foo: 42 })", Node::from("n0", vec!["A", "B"], vec![("foo", CypherValue::Integer(42))]))]
     fn node_test(input: &str, expected: Node) {
@@ -553,13 +609,29 @@ mod tests {
         assert!(input.parse::<Node>().is_err())
     }
 
-    #[test_case("-->",    Relationship::outgoing(None, None); "outgoing: no body")]
-    #[test_case("-[]->",  Relationship::outgoing(None, None); "outgoing: with body")]
-    #[test_case("-[ ]->", Relationship::outgoing(None, None); "outgoing: body with space")]
-    #[test_case("<--",    Relationship::incoming(None, None); "incoming: no body")]
-    #[test_case("<-[]-",  Relationship::incoming(None, None); "incoming: with body")]
-    #[test_case("<-[ ]-", Relationship::incoming(None, None); "incoming: body with space")]
-    fn relationship_empty(input: &str, expected: Relationship) {
+    #[test_case("-->",                     Relationship { direction: Direction::Outgoing, ..Relationship::default()})]
+    #[test_case("-[]->",                   Relationship { direction: Direction::Outgoing, ..Relationship::default()}; "outgoing: with body")]
+    #[test_case("-[ ]->",                  Relationship { direction: Direction::Outgoing, ..Relationship::default()}; "outgoing: body with space")]
+    #[test_case("<--",                     Relationship { direction: Direction::Incoming, ..Relationship::default()}; "incoming: no body")]
+    #[test_case("<-[]-",                   Relationship { direction: Direction::Incoming, ..Relationship::default()}; "incoming: with body")]
+    #[test_case("<-[ ]-",                  Relationship { direction: Direction::Incoming, ..Relationship::default()}; "incoming: body with space")]
+    #[test_case("-[r0]->",                 Relationship { identifier: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0 outgoing")]
+    #[test_case("-[ r0 ]->",               Relationship { identifier: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0 outgoing with space")]
+    #[test_case("<-[r0]-",                 Relationship { identifier: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0 incoming")]
+    #[test_case("<-[ r0 ]-",               Relationship { identifier: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0 incoming with space")]
+    #[test_case("-[:BAR]->",               Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "BAR outgoing")]
+    #[test_case("-[ :BAR ]->",             Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "BAR outgoing with space")]
+    #[test_case("<-[:BAR]-",               Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "BAR incoming")]
+    #[test_case("<-[ :BAR ]-",             Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "BAR incoming with space")]
+    #[test_case("-[r0:BAR]->",             Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0:Bar outgoing")]
+    #[test_case("-[ r0:BAR ]->",           Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default()};  "r0:Bar outgoing with space")]
+    #[test_case("<-[r0:BAR]-",             Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0:Bar incoming")]
+    #[test_case("<-[ r0:BAR ]-",           Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0:Bar incoming with space")]
+    #[test_case("<-[{ foo: 42 }]-",        Relationship { identifier: None, rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::Integer(42))).into_iter().collect::<HashMap<_,_>>() }; "with properties")]
+    #[test_case("<-[r0 { foo: 42 }]-",     Relationship { identifier: Some("r0".to_string()), rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::Integer(42))).into_iter().collect::<HashMap<_,_>>() }; "r0 with properties")]
+    #[test_case("<-[:BAR { foo: 42 }]-",   Relationship { identifier: None, rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::Integer(42))).into_iter().collect::<HashMap<_,_>>() }; "Bar with properties")]
+    #[test_case("<-[r0:BAR { foo: 42 }]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::Integer(42))).into_iter().collect::<HashMap<_,_>>() }; "r0:Bar with properties")]
+    fn relationship_test(input: &str, expected: Relationship) {
         assert_eq!(input.parse(), Ok(expected));
     }
 
@@ -571,30 +643,6 @@ mod tests {
     #[test_case("<-"   ; "incoming: no hyphen")]
     fn relationship_negative(input: &str) {
         assert!(input.parse::<Relationship>().is_err());
-    }
-
-    #[test_case("-[r0]->",   Relationship { identifier: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "outgoing")]
-    #[test_case("-[ r0 ]->", Relationship { identifier: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "outgoing with space")]
-    #[test_case("<-[r0]-",   Relationship { identifier: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "incoming")]
-    #[test_case("<-[ r0 ]-", Relationship { identifier: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "incoming with space")]
-    fn relationship_with_identifier(input: &str, expected: Relationship) {
-        assert_eq!(input.parse(), Ok(expected));
-    }
-
-    #[test_case("-[:BAR]->",   Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "outgoing")]
-    #[test_case("-[ :BAR ]->", Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "outgoing with space")]
-    #[test_case("<-[:BAR]-",   Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "incoming")]
-    #[test_case("<-[ :BAR ]-", Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "incoming with space")]
-    fn relationship_with_rel_type(input: &str, expected: Relationship) {
-        assert_eq!(input.parse(), Ok(expected));
-    }
-
-    #[test_case("-[r0:BAR]->",   Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, }; "outgoing")]
-    #[test_case("-[ r0:BAR ]->", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, }; "outgoing with space")]
-    #[test_case("<-[r0:BAR]-",   Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, }; "incoming")]
-    #[test_case("<-[ r0:BAR ]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, }; "incoming with space")]
-    fn relationship_full(input: &str, expected: Relationship) {
-        assert_eq!(input.parse(), Ok(expected));
     }
 
     #[test]
@@ -615,7 +663,7 @@ mod tests {
             Ok(Path {
                 start: Node::with_identifier("a"),
                 elements: vec![(
-                    Relationship::outgoing(None, None),
+                    Relationship::outgoing(None, None, HashMap::default()),
                     Node::with_identifier("b")
                 )]
             })
@@ -630,11 +678,11 @@ mod tests {
                 start: Node::with_identifier("a"),
                 elements: vec![
                     (
-                        Relationship::outgoing(None, None),
+                        Relationship::outgoing(None, None, HashMap::default()),
                         Node::with_identifier("b")
                     ),
                     (
-                        Relationship::incoming(None, None),
+                        Relationship::incoming(None, None, HashMap::default()),
                         Node::with_identifier("c")
                     ),
                 ]
@@ -650,7 +698,7 @@ mod tests {
                 start: Node::with_identifier_and_labels("a", vec!["A"]),
                 elements: vec![
                     (
-                        Relationship::incoming(None, Some("R".to_string())),
+                        Relationship::incoming(None, Some("R".to_string()), HashMap::default()),
                         Node::new(None, vec!["B".to_string()], HashMap::default())
                     ),
                     (
@@ -658,11 +706,11 @@ mod tests {
                         Node::with_identifier("c")
                     ),
                     (
-                        Relationship::outgoing(None, None),
+                        Relationship::outgoing(None, None, HashMap::default()),
                         Node::with_identifier_and_labels("d", vec!["D1", "D2"])
                     ),
                     (
-                        Relationship::incoming(None, None),
+                        Relationship::incoming(None, None, HashMap::default()),
                         Node::new(
                             None,
                             vec!["E1".to_string(), "E2".to_string()],
@@ -691,7 +739,7 @@ mod tests {
             Ok(Graph::new(vec![Path {
                 start: Node::with_identifier("a"),
                 elements: vec![(
-                    Relationship::outgoing(None, None),
+                    Relationship::outgoing(None, None, HashMap::default()),
                     Node::with_identifier("b")
                 )]
             }]))
