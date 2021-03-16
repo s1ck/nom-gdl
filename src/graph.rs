@@ -85,6 +85,17 @@ pub struct GdlGraph {
 }
 
 impl GdlGraph {
+    /// Creates a new GdlGraph from the given GDL string.
+    ///
+    /// Example
+    ///
+    /// ```
+    /// use gdl::GdlGraph;
+    ///
+    /// let graph = GdlGraph::from("(alice)-[:KNOWS]->(bob)").unwrap();
+    /// assert_eq!(graph.node_count(), 2);
+    /// assert_eq!(graph.relationship_count(), 1);
+    /// ```
     pub fn from(input: &str) -> Result<Self, GraphHandlerError> {
         let mut graph_handler = Self::default();
         graph_handler.parse(input)?;

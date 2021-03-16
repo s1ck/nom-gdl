@@ -1,3 +1,6 @@
 #![allow(dead_code)]
 pub mod graph;
-mod parser;
+pub mod parser;
+
+pub use graph::GdlGraph;
+pub use parser::CypherValue;
