@@ -49,21 +49,29 @@ impl Node {
         }
     }
 }
-#[derive(PartialEq, Eq, Debug, Default)]
+#[derive(PartialEq, Debug, Default)]
 pub struct Relationship {
     id: usize,
     source_id: usize,
     target_id: usize,
     identifier: String,
     rel_type: Option<Rc<String>>,
+    properties: HashMap<String, CypherValue>,
 }
 
 impl Relationship {
     #[cfg(test)]
-    fn new(identifier: impl Into<String>, rel_type: Option<&str>) -> Self {
+    fn new<T>(identifier: T, rel_type: Option<&str>, properties: HashMap<T, CypherValue>) -> Self
+    where
+        T: Into<String>,
+    {
         Self {
             identifier: identifier.into(),
             rel_type: rel_type.map(|s| Rc::new(s.to_string())),
+            properties: properties
+                .into_iter()
+                .map(|(k, v)| (Into::into(k), v))
+                .collect::<HashMap<_, _>>(),
             ..Relationship::default()
         }
     }
@@ -199,6 +207,7 @@ impl GdlGraph {
                     target_id: usize::default(),
                     identifier,
                     rel_type,
+                    properties: parse_relationship.properties,
                 };
 
                 Ok(entry.insert(new_relationship))
@@ -257,10 +266,11 @@ mod tests {
         assert_eq!(*node, expected)
     }
 
-    #[test_case("-->", Relationship::new("__r0", None) ; "empty")]
-    #[test_case("-[r]->", Relationship::new("r", None) ; "identifier only")]
-    #[test_case("-[:R]->", Relationship::new("__r0", Some("R")) ; "rel_type only")]
-    #[test_case("-[r:R]->", Relationship::new("r", Some("R")) ; "full")]
+    #[test_case("-->", Relationship::new("__r0", None, HashMap::default()) ; "empty")]
+    #[test_case("-[r]->", Relationship::new("r", None, HashMap::default()) ; "identifier only")]
+    #[test_case("-[:R]->", Relationship::new("__r0", Some("R"), HashMap::default()) ; "rel type only")]
+    #[test_case("-[r:R]->", Relationship::new("r", Some("R"), HashMap::default()) ; "identifer and rel type")]
+    #[test_case("-[r:R { foo: 42 }]->", Relationship::new("r", Some("R"), std::iter::once(("foo", CypherValue::Integer(42))).collect::<HashMap<_,_>>()) ; "full")]
     fn convert_relationship(input: &str, expected: Relationship) {
         let parse_relationship = input.parse::<ParseRelationship>().unwrap();
         let mut graph_handler = GdlGraph::default();
