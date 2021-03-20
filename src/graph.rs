@@ -94,7 +94,12 @@ impl Graph {
     /// use gdl::CypherValue;
     /// use std::rc::Rc;
     ///
-    /// let graph = Graph::from("(alice:Person { age: 23 })-[r:KNOWS]->(bob:Person { age: 42 })").unwrap();
+    /// let graph = Graph::from(
+    ///     "(alice:Person { age: 23 }),
+    ///     (bob:Person { age: 42 }),
+    ///     (alice)-[r:KNOWS]->(bob)",
+    ///     )
+    ///     .unwrap();
     ///
     /// assert_eq!(graph.node_count(), 2);
     /// assert_eq!(graph.relationship_count(), 1);
