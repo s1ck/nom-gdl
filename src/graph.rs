@@ -183,7 +183,7 @@ impl Graph {
     ///
     /// assert_eq!(n0.identifier, String::from("n0"));
     /// assert_eq!(n0.labels, vec![Rc::new(String::from("A")), Rc::new(String::from("B"))]);
-    /// assert_eq!(n0.properties.get("foo").unwrap(), &CypherValue::Integer(42));
+    /// assert_eq!(n0.properties.get("foo").unwrap(), &CypherValue::from(42));
     /// ```
     pub fn get_node(&self, identifier: &str) -> Option<&Node> {
         self.node_cache.get(identifier)
@@ -204,7 +204,7 @@ impl Graph {
     ///
     /// assert_eq!(r0.identifier, String::from("r0"));
     /// assert_eq!(r0.rel_type, Some(Rc::new(String::from("REL"))));
-    /// assert_eq!(r0.properties.get("bar").unwrap(), &CypherValue::Float(13.37));
+    /// assert_eq!(r0.properties.get("bar").unwrap(), &CypherValue::from(13.37));
     /// ```
     pub fn get_relationship(&self, identifier: &str) -> Option<&Relationship> {
         self.relationship_cache.get(identifier)

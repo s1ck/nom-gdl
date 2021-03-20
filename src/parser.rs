@@ -192,6 +192,18 @@ pub enum CypherValue {
     Integer(i64),
 }
 
+impl From<f64> for CypherValue {
+    fn from(value: f64) -> Self {
+        CypherValue::Float(value)
+    }
+}
+
+impl From<i64> for CypherValue {
+    fn from(value: i64) -> Self {
+        CypherValue::Integer(value)
+    }
+}
+
 impl FromStr for CypherValue {
     type Err = Error<String>;
 
@@ -518,6 +530,12 @@ mod tests {
     #[test_case("-42.2", CypherValue::Float(-42.2) ; "float: negative")]
     fn cypher_value(input: &str, expected: CypherValue) {
         assert_eq!(input.parse(), Ok(expected))
+    }
+
+    #[test]
+    fn cypher_value_from() {
+        assert_eq!(CypherValue::from(42), CypherValue::Integer(42));
+        assert_eq!(CypherValue::from(13.37), CypherValue::Float(13.37));
     }
 
     #[test_case("key:42",     ("key".to_string(), CypherValue::Integer(42)))]
