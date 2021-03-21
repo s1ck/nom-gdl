@@ -380,7 +380,7 @@ mod tests {
     #[test_case("(a)", Node::new(0, "a", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "identifier only")]
     #[test_case("(:A)", Node::new(0, "__v0", vec!["A"], HashMap::<String, CypherValue>::new()) ; "label only")]
     #[test_case("(a:A)", Node::new(0, "a", vec!["A"], HashMap::<String, CypherValue>::new()) ; "identifier and label")]
-    #[test_case("(a:A { foo: 42 })", Node::new(0, "a", vec!["A"], std::iter::once(("foo", CypherValue::Integer(42))).collect::<HashMap<_,_>>()); "full")]
+    #[test_case("(a:A { foo: 42, bar: 'foobar' })", Node::new(0, "a", vec!["A"], vec![("foo", CypherValue::Integer(42)), ("bar", CypherValue::from("foobar"))].into_iter().collect::<HashMap<_,_>>()); "full")]
     fn convert_node(input: &str, expected: Node) {
         let parse_node = input.parse::<ParseNode>().unwrap();
         let mut graph_handler = Graph::default();

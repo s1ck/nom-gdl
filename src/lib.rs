@@ -17,8 +17,8 @@
 //! use gdl::{CypherValue, Graph};
 //! use std::rc::Rc;
 //!
-//! let gdl_string = "(alice:Person { age: 23 }),
-//!                   (bob:Person { age: 42 }),
+//! let gdl_string = "(alice:Person { name: 'Alice', age: 23 }),
+//!                   (bob:Person { name: 'Bob', age: 42 }),
 //!                   (alice)-[r:KNOWS { since: 1984 }]->(bob)";
 //!
 //! let graph = Graph::from(gdl_string).unwrap();
@@ -27,7 +27,8 @@
 //! assert_eq!(graph.relationship_count(), 1);
 //!
 //! let alice = graph.get_node("alice").unwrap();
-//! assert_eq!(alice.properties.get("age"), Some(&CypherValue::Integer(23)));
+//! assert_eq!(alice.properties.get("age"), Some(&CypherValue::from(23)));
+//! assert_eq!(alice.properties.get("name"), Some(&CypherValue::from("Alice")));
 //!
 //! let relationship = graph.get_relationship("r").unwrap();
 //! assert_eq!(relationship.rel_type, Some(Rc::new(String::from("KNOWS"))));
@@ -51,12 +52,13 @@
 //! assert!(g.get_node("alice").is_some());
 //! ```
 //!
-//! Define a node with label `User` and a single property:
+//! Define a node with label `User` and multiple properties:
 //!
 //! ```
-//! let g = gdl::Graph::from("(alice:User { age : 23 })").unwrap();
+//! let g = gdl::Graph::from("(alice:User { name: 'Alice', age : 23 })").unwrap();
 //!
 //! assert_eq!(g.get_node("alice").unwrap().labels.len(), 1);
+//! assert!(g.get_node("alice").unwrap().properties.get("name").is_some());
 //! assert!(g.get_node("alice").unwrap().properties.get("age").is_some());
 //! ```
 //!
