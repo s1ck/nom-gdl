@@ -106,7 +106,7 @@ impl Graph {
     ///
     /// let alice = graph.get_node("alice").unwrap();
     ///
-    /// assert_eq!(alice.properties.get("age"), Some(&CypherValue::Integer(23)));
+    /// assert_eq!(alice.properties.get("age"), Some(&CypherValue::from(23)));
     ///
     /// let relationship = graph.get_relationship("r").unwrap();
     /// assert_eq!(relationship.rel_type, Some(Rc::new(String::from("KNOWS"))));
@@ -380,7 +380,7 @@ mod tests {
     #[test_case("(a)", Node::new(0, "a", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "identifier only")]
     #[test_case("(:A)", Node::new(0, "__v0", vec!["A"], HashMap::<String, CypherValue>::new()) ; "label only")]
     #[test_case("(a:A)", Node::new(0, "a", vec!["A"], HashMap::<String, CypherValue>::new()) ; "identifier and label")]
-    #[test_case("(a:A { foo: 42, bar: 'foobar' })", Node::new(0, "a", vec!["A"], vec![("foo", CypherValue::Integer(42)), ("bar", CypherValue::from("foobar"))].into_iter().collect::<HashMap<_,_>>()); "full")]
+    #[test_case("(a:A { foo: 42, bar: 'foobar' })", Node::new(0, "a", vec!["A"], vec![("foo", CypherValue::from(42)), ("bar", CypherValue::from("foobar"))].into_iter().collect::<HashMap<_,_>>()); "full")]
     fn convert_node(input: &str, expected: Node) {
         let parse_node = input.parse::<ParseNode>().unwrap();
         let mut graph_handler = Graph::default();
@@ -393,7 +393,7 @@ mod tests {
     #[test_case("-[r]->", Relationship::new("r", None, HashMap::default()) ; "identifier only")]
     #[test_case("-[:R]->", Relationship::new("__r0", Some("R"), HashMap::default()) ; "rel type only")]
     #[test_case("-[r:R]->", Relationship::new("r", Some("R"), HashMap::default()) ; "identifer and rel type")]
-    #[test_case("-[r:R { foo: 42 }]->", Relationship::new("r", Some("R"), std::iter::once(("foo", CypherValue::Integer(42))).collect::<HashMap<_,_>>()) ; "full")]
+    #[test_case("-[r:R { foo: 42 }]->", Relationship::new("r", Some("R"), std::iter::once(("foo", CypherValue::from(42))).collect::<HashMap<_,_>>()) ; "full")]
     fn convert_relationship(input: &str, expected: Relationship) {
         let parse_relationship = input.parse::<ParseRelationship>().unwrap();
         let mut graph_handler = Graph::default();

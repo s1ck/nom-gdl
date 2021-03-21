@@ -256,7 +256,7 @@ fn integer_literal(input: &str) -> IResult<&str, CypherValue> {
         if is_negative {
             num = -num;
         }
-        CypherValue::Integer(num)
+        CypherValue::from(num)
     })(input)
 }
 
@@ -268,7 +268,7 @@ fn float_literal(input: &str) -> IResult<&str, CypherValue> {
             if is_negative {
                 num = -num;
             }
-            CypherValue::Float(num)
+            CypherValue::from(num)
         },
     )(input)
 }
@@ -548,51 +548,48 @@ mod tests {
         }
     }
 
-    #[test_case("0",              CypherValue::Integer(0)   ; "int: zero")]
-    #[test_case("-0",             CypherValue::Integer(0)   ; "int: signed zero")]
-    #[test_case("42",             CypherValue::Integer(42)  ; "int: positive")]
-    #[test_case("-42",            CypherValue::Integer(-42) ; "int: negative")]
-    #[test_case("0.0",            CypherValue::Float(0.0)   ; "float: zero v1")]
-    #[test_case("0.",             CypherValue::Float(0.0)   ; "float: zero v2")]
-    #[test_case(".0",             CypherValue::Float(0.0)   ; "float: zero v3")]
-    #[test_case("-0.0",           CypherValue::Float(0.0)   ; "float: signed zero")]
-    #[test_case("-.0",            CypherValue::Float(0.0)   ; "float: signed zero v2")]
-    #[test_case("13.37",          CypherValue::Float(13.37) ; "float: positive")]
-    #[test_case("-42.2",          CypherValue::Float(-42.2) ; "float: negative")]
-    #[test_case("'foobar'",       CypherValue::String("foobar".into())       ; "sq string: alpha")]
-    #[test_case("'1234'",         CypherValue::String("1234".into())         ; "sq string: numeric")]
-    #[test_case("'    '",         CypherValue::String("    ".into())         ; "sq string: whitespacec")]
-    #[test_case(r#"'foobar\'s'"#, CypherValue::String(r#"foobar\'s"#.into()) ; "sq string: escaped")]
-    #[test_case("\"foobar\"",     CypherValue::String("foobar".into())       ; "dq string: alpha")]
-    #[test_case("\"1234\"",       CypherValue::String("1234".into())         ; "dq string: numeric")]
-    #[test_case("\"    \"",       CypherValue::String("    ".into())         ; "dq string: whitespacec")]
-    #[test_case(r#""foobar\"s""#, CypherValue::String(r#"foobar\"s"#.into()) ; "dq string: escaped")]
+    #[test_case("0",              CypherValue::from(0)   ; "int: zero")]
+    #[test_case("-0",             CypherValue::from(0)   ; "int: signed zero")]
+    #[test_case("42",             CypherValue::from(42)  ; "int: positive")]
+    #[test_case("-42",            CypherValue::from(-42) ; "int: negative")]
+    #[test_case("0.0",            CypherValue::from(0.0)   ; "float: zero v1")]
+    #[test_case("0.",             CypherValue::from(0.0)   ; "float: zero v2")]
+    #[test_case(".0",             CypherValue::from(0.0)   ; "float: zero v3")]
+    #[test_case("-0.0",           CypherValue::from(0.0)   ; "float: signed zero")]
+    #[test_case("-.0",            CypherValue::from(0.0)   ; "float: signed zero v2")]
+    #[test_case("13.37",          CypherValue::from(13.37) ; "float: positive")]
+    #[test_case("-42.2",          CypherValue::from(-42.2) ; "float: negative")]
+    #[test_case("'foobar'",       CypherValue::from("foobar")       ; "sq string: alpha")]
+    #[test_case("'1234'",         CypherValue::from("1234")         ; "sq string: numeric")]
+    #[test_case("'    '",         CypherValue::from("    ")         ; "sq string: whitespacec")]
+    #[test_case(r#"'foobar\'s'"#, CypherValue::from(r#"foobar\'s"#) ; "sq string: escaped")]
+    #[test_case("\"foobar\"",     CypherValue::from("foobar")       ; "dq string: alpha")]
+    #[test_case("\"1234\"",       CypherValue::from("1234")         ; "dq string: numeric")]
+    #[test_case("\"    \"",       CypherValue::from("    ")         ; "dq string: whitespacec")]
+    #[test_case(r#""foobar\"s""#, CypherValue::from(r#"foobar\"s"#) ; "dq string: escaped")]
     fn cypher_value(input: &str, expected: CypherValue) {
         assert_eq!(input.parse(), Ok(expected))
     }
 
     #[test]
     fn cypher_value_from() {
-        assert_eq!(CypherValue::from(42), CypherValue::Integer(42));
-        assert_eq!(CypherValue::from(13.37), CypherValue::Float(13.37));
-        assert_eq!(
-            CypherValue::from("foobar"),
-            CypherValue::String("foobar".into())
-        )
+        assert_eq!(CypherValue::from(42), CypherValue::from(42));
+        assert_eq!(CypherValue::from(13.37), CypherValue::from(13.37));
+        assert_eq!(CypherValue::from("foobar"), CypherValue::from("foobar"))
     }
 
-    #[test_case("key:42",         ("key".to_string(), CypherValue::Integer(42)))]
-    #[test_case("key: 1337",      ("key".to_string(), CypherValue::Integer(1337)))]
-    #[test_case("key2: 1337",     ("key2".to_string(), CypherValue::Integer(1337)))]
+    #[test_case("key:42",         ("key".to_string(), CypherValue::from(42)))]
+    #[test_case("key: 1337",      ("key".to_string(), CypherValue::from(1337)))]
+    #[test_case("key2: 1337",     ("key2".to_string(), CypherValue::from(1337)))]
     #[test_case("key2: 'foobar'", ("key2".to_string(), CypherValue::from("foobar")))]
     fn key_value_pair_test(input: &str, expected: (String, CypherValue)) {
         assert_eq!(key_value_pair(input).unwrap().1, expected)
     }
 
-    #[test_case("{key1: 42}",               vec![("key1".to_string(), CypherValue::Integer(42))])]
-    #[test_case("{key1: 13.37 }",           vec![("key1".to_string(), CypherValue::Float(13.37))])]
-    #[test_case("{ key1: 42, key2: 1337 }", vec![("key1".to_string(), CypherValue::Integer(42)), ("key2".to_string(), CypherValue::Integer(1337))])]
-    #[test_case("{ key1: 42, key2: 1337, key3: 'foobar' }", vec![("key1".to_string(), CypherValue::Integer(42)), ("key2".to_string(), CypherValue::Integer(1337)), ("key3".to_string(), CypherValue::from("foobar"))])]
+    #[test_case("{key1: 42}",               vec![("key1".to_string(), CypherValue::from(42))])]
+    #[test_case("{key1: 13.37 }",           vec![("key1".to_string(), CypherValue::from(13.37))])]
+    #[test_case("{ key1: 42, key2: 1337 }", vec![("key1".to_string(), CypherValue::from(42)), ("key2".to_string(), CypherValue::from(1337))])]
+    #[test_case("{ key1: 42, key2: 1337, key3: 'foobar' }", vec![("key1".to_string(), CypherValue::from(42)), ("key2".to_string(), CypherValue::from(1337)), ("key3".to_string(), CypherValue::from("foobar"))])]
     fn properties_test(input: &str, expected: Vec<(String, CypherValue)>) {
         let expected = expected.into_iter().collect::<HashMap<_, _>>();
         assert_eq!(properties(input).unwrap().1, expected)
@@ -659,8 +656,8 @@ mod tests {
     #[test_case("(n0:A)",               Node::with_identifier_and_labels("n0", vec!["A"]))]
     #[test_case("(n0:A:B)",             Node::with_identifier_and_labels("n0", vec!["A", "B"]))]
     #[test_case("( n0:A:B )",           Node::with_identifier_and_labels("n0", vec!["A", "B"]); "n0:A:B with space")]
-    #[test_case("(n0 { foo: 42 })",     Node::from("n0", vec![], vec![("foo", CypherValue::Integer(42))]))]
-    #[test_case("(n0:A:B { foo: 42 })", Node::from("n0", vec!["A", "B"], vec![("foo", CypherValue::Integer(42))]))]
+    #[test_case("(n0 { foo: 42 })",     Node::from("n0", vec![], vec![("foo", CypherValue::from(42))]))]
+    #[test_case("(n0:A:B { foo: 42 })", Node::from("n0", vec!["A", "B"], vec![("foo", CypherValue::from(42))]))]
     fn node_test(input: &str, expected: Node) {
         assert_eq!(input.parse(), Ok(expected));
     }
@@ -690,10 +687,10 @@ mod tests {
     #[test_case("-[ r0:BAR ]->",           Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default()};  "r0:Bar outgoing with space")]
     #[test_case("<-[r0:BAR]-",             Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0:Bar incoming")]
     #[test_case("<-[ r0:BAR ]-",           Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0:Bar incoming with space")]
-    #[test_case("<-[{ foo: 42 }]-",        Relationship { identifier: None, rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::Integer(42))).into_iter().collect::<HashMap<_,_>>() }; "with properties")]
-    #[test_case("<-[r0 { foo: 42 }]-",     Relationship { identifier: Some("r0".to_string()), rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::Integer(42))).into_iter().collect::<HashMap<_,_>>() }; "r0 with properties")]
-    #[test_case("<-[:BAR { foo: 42 }]-",   Relationship { identifier: None, rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::Integer(42))).into_iter().collect::<HashMap<_,_>>() }; "Bar with properties")]
-    #[test_case("<-[r0:BAR { foo: 42 }]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::Integer(42))).into_iter().collect::<HashMap<_,_>>() }; "r0:Bar with properties")]
+    #[test_case("<-[{ foo: 42 }]-",        Relationship { identifier: None, rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "with properties")]
+    #[test_case("<-[r0 { foo: 42 }]-",     Relationship { identifier: Some("r0".to_string()), rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "r0 with properties")]
+    #[test_case("<-[:BAR { foo: 42 }]-",   Relationship { identifier: None, rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "Bar with properties")]
+    #[test_case("<-[r0:BAR { foo: 42 }]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "r0:Bar with properties")]
     fn relationship_test(input: &str, expected: Relationship) {
         assert_eq!(input.parse(), Ok(expected));
     }
