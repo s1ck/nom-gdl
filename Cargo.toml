@@ -6,7 +6,7 @@ description = "Graph Definition Language"
 keywords = ["graph", "cypher", "parser", "nom"]
 name = "gdl"
 repository = "https://github.com/s1ck/nom-gdl"
-version = "0.1.0"
+version = "0.2.0"
 
 [dependencies]
 nom = "6"
@@ -14,4 +14,4 @@ thiserror = "1.0.24"
 
 [dev-dependencies]
 test-case = "1.1.0"
-pretty_assertions = "0.6"
+pretty_assertions = "0.7.1"
