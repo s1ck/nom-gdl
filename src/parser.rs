@@ -562,10 +562,12 @@ mod tests {
     #[test_case("'foobar'",       CypherValue::from("foobar")       ; "sq string: alpha")]
     #[test_case("'1234'",         CypherValue::from("1234")         ; "sq string: numeric")]
     #[test_case("'    '",         CypherValue::from("    ")         ; "sq string: whitespacec")]
+    #[test_case("''",             CypherValue::from("")             ; "sq string: empty")]
     #[test_case(r#"'foobar\'s'"#, CypherValue::from(r#"foobar\'s"#) ; "sq string: escaped")]
     #[test_case("\"foobar\"",     CypherValue::from("foobar")       ; "dq string: alpha")]
     #[test_case("\"1234\"",       CypherValue::from("1234")         ; "dq string: numeric")]
     #[test_case("\"    \"",       CypherValue::from("    ")         ; "dq string: whitespacec")]
+    #[test_case("\"\"",           CypherValue::from("")             ; "dq string: empty")]
     #[test_case(r#""foobar\"s""#, CypherValue::from(r#"foobar\"s"#) ; "dq string: escaped")]
     fn cypher_value(input: &str, expected: CypherValue) {
         assert_eq!(input.parse(), Ok(expected))
