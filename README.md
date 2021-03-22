@@ -17,8 +17,8 @@ Relationships are directed, starting at a source node and pointing at a target n
 use gdl::{CypherValue, Graph};
 use std::rc::Rc;
 
-let gdl_string = "(alice:Person { age: 23 }),
-                  (bob:Person { age: 42 }),
+let gdl_string = "(alice:Person { name: 'Alice', age: 23 }),
+                  (bob:Person { name: 'Bob', age: 42 }),
                   (alice)-[r:KNOWS { since: 1984 }]->(bob)";
 
 let graph = Graph::from(gdl_string).unwrap();
@@ -27,10 +27,11 @@ assert_eq!(graph.node_count(), 2);
 assert_eq!(graph.relationship_count(), 1);
 
 let alice = graph.get_node("alice").unwrap();
-assert_eq!(alice.properties.get("age"), Some(&CypherValue::Integer(23)));
+assert_eq!(alice.property_value("age"), Some(&CypherValue::from(23)));
+assert_eq!(alice.property_value("name"), Some(&CypherValue::from("Alice")));
 
 let relationship = graph.get_relationship("r").unwrap();
-assert_eq!(relationship.rel_type, Some(Rc::new(String::from("KNOWS"))));
+assert_eq!(relationship.rel_type(), Some("KNOWS"));
 ```
 
 ### More GDL language examples
@@ -51,13 +52,14 @@ let g = gdl::Graph::from("(alice)").unwrap();
 assert!(g.get_node("alice").is_some());
 ```
 
-Define a node with label `User` and a single property:
+Define a node with label `User` and multiple properties:
 
 ```rust
-let g = gdl::Graph::from("(alice:User { age : 23 })").unwrap();
+let g = gdl::Graph::from("(alice:User { name: 'Alice', age : 23 })").unwrap();
 
-assert_eq!(g.get_node("alice").unwrap().labels.len(), 1);
-assert!(g.get_node("alice").unwrap().properties.get("age").is_some());
+assert_eq!(g.get_node("alice").unwrap().labels().collect::<Vec<_>>(), vec!["User"]);
+assert!(g.get_node("alice").unwrap().property_value("name").is_some());
+assert!(g.get_node("alice").unwrap().property_value("age").is_some());
 ```
 
  Define an outgoing relationship:
@@ -84,7 +86,7 @@ use std::rc::Rc;
 let g = gdl::Graph::from("(alice)-[r1:KNOWS { since : 2014 }]->(bob)").unwrap();
 
 assert!(g.get_relationship("r1").is_some());
-assert_eq!(g.get_relationship("r1").unwrap().rel_type, Some(Rc::new(String::from("KNOWS"))));
+assert_eq!(g.get_relationship("r1").unwrap().rel_type(), Some("KNOWS"));
 ```
 
 Define multiple outgoing relationships from the same source node (i.e. `alice`):
