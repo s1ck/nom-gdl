@@ -27,8 +27,8 @@
 //! assert_eq!(graph.relationship_count(), 1);
 //!
 //! let alice = graph.get_node("alice").unwrap();
-//! assert_eq!(alice.properties.get("age"), Some(&CypherValue::from(23)));
-//! assert_eq!(alice.properties.get("name"), Some(&CypherValue::from("Alice")));
+//! assert_eq!(alice.property_value("age"), Some(&CypherValue::from(23)));
+//! assert_eq!(alice.property_value("name"), Some(&CypherValue::from("Alice")));
 //!
 //! let relationship = graph.get_relationship("r").unwrap();
 //! assert_eq!(relationship.rel_type(), Some("KNOWS"));
@@ -58,8 +58,8 @@
 //! let g = gdl::Graph::from("(alice:User { name: 'Alice', age : 23 })").unwrap();
 //!
 //! assert_eq!(g.get_node("alice").unwrap().labels().collect::<Vec<_>>(), vec!["User"]);
-//! assert!(g.get_node("alice").unwrap().properties.get("name").is_some());
-//! assert!(g.get_node("alice").unwrap().properties.get("age").is_some());
+//! assert!(g.get_node("alice").unwrap().property_value("name").is_some());
+//! assert!(g.get_node("alice").unwrap().property_value("age").is_some());
 //! ```
 //!
 //!  Define an outgoing relationship:

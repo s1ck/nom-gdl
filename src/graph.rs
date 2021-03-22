@@ -25,7 +25,7 @@ pub struct Node {
     id: usize,
     variable: String,
     labels: Vec<Rc<String>>,
-    pub properties: HashMap<String, CypherValue>,
+    properties: HashMap<String, CypherValue>,
 }
 
 impl Node {
@@ -127,7 +127,7 @@ impl Graph {
     ///
     /// let alice = graph.get_node("alice").unwrap();
     ///
-    /// assert_eq!(alice.properties.get("age"), Some(&CypherValue::from(23)));
+    /// assert_eq!(alice.property_value("age"), Some(&CypherValue::from(23)));
     ///
     /// let relationship = graph.get_relationship("r").unwrap();
     /// assert_eq!(relationship.rel_type(), Some("KNOWS"));
@@ -204,7 +204,7 @@ impl Graph {
     ///
     /// assert_eq!(n0.variable(), String::from("n0"));
     /// assert_eq!(n0.labels().collect::<Vec<_>>(), vec!["A", "B"]);
-    /// assert_eq!(n0.properties.get("foo").unwrap(), &CypherValue::from(42));
+    /// assert_eq!(n0.property_value("foo").unwrap(), &CypherValue::from(42));
     /// ```
     pub fn get_node(&self, variable: &str) -> Option<&Node> {
         self.node_cache.get(variable)
