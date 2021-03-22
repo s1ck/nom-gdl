@@ -40,6 +40,18 @@ impl Node {
     pub fn labels(&self) -> impl Iterator<Item = &str> {
         self.labels.iter().map(|label| (*label).as_str())
     }
+
+    pub fn property_keys(&self) -> impl Iterator<Item = &str> {
+        self.properties.keys().map(|k| k.as_str())
+    }
+
+    pub fn property_value(&self, key: &str) -> Option<&CypherValue> {
+        self.properties.get(key)
+    }
+
+    pub fn properties(&self) -> impl Iterator<Item = (&str, &CypherValue)> {
+        self.properties.iter().map(|(k, v)| (k.as_str(), v))
+    }
 }
 
 #[derive(PartialEq, Debug, Default)]
@@ -49,7 +61,7 @@ pub struct Relationship {
     target_id: usize,
     identifier: String,
     rel_type: Option<Rc<String>>,
-    pub properties: HashMap<String, CypherValue>,
+    properties: HashMap<String, CypherValue>,
 }
 
 impl Relationship {
@@ -71,6 +83,18 @@ impl Relationship {
 
     pub fn rel_type(&self) -> Option<&str> {
         self.rel_type.as_ref().map(|rel_type| (**rel_type).as_str())
+    }
+
+    pub fn property_keys(&self) -> impl Iterator<Item = &str> {
+        self.properties.keys().map(|k| k.as_str())
+    }
+
+    pub fn property_value(&self, key: &str) -> Option<&CypherValue> {
+        self.properties.get(key)
+    }
+
+    pub fn properties(&self) -> impl Iterator<Item = (&str, &CypherValue)> {
+        self.properties.iter().map(|(k, v)| (k.as_str(), v))
     }
 }
 
@@ -201,7 +225,7 @@ impl Graph {
     ///
     /// assert_eq!(r0.identifier(), String::from("r0"));
     /// assert_eq!(r0.rel_type(), Some("REL"));
-    /// assert_eq!(r0.properties.get("bar").unwrap(), &CypherValue::from(13.37));
+    /// assert_eq!(r0.property_value("bar").unwrap(), &CypherValue::from(13.37));
     /// ```
     pub fn get_relationship(&self, identifier: &str) -> Option<&Relationship> {
         self.relationship_cache.get(identifier)
@@ -512,6 +536,12 @@ mod tests {
         assert_eq!(n.id(), 42);
         assert_eq!(n.identifier(), "n42");
         assert_eq!(n.labels().collect::<Vec<_>>(), vec!["A", "B"]);
+        assert_eq!(n.property_keys().collect::<Vec<_>>(), vec!["foo"]);
+        assert_eq!(n.property_value("foo").unwrap(), &CypherValue::from(42));
+        assert_eq!(
+            n.properties().collect::<Vec<_>>(),
+            vec![("foo", &CypherValue::from(42))]
+        )
     }
 
     #[test]
@@ -533,6 +563,12 @@ mod tests {
         assert_eq!(r.target_id(), 37);
         assert_eq!(r.identifier(), "r42");
         assert_eq!(r.rel_type(), Some("REL"));
+        assert_eq!(r.property_keys().collect::<Vec<_>>(), vec!["foo"]);
+        assert_eq!(r.property_value("foo").unwrap(), &CypherValue::from(42));
+        assert_eq!(
+            r.properties().collect::<Vec<_>>(),
+            vec![("foo", &CypherValue::from(42))]
+        )
     }
 
     #[test]
