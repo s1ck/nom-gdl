@@ -20,11 +20,11 @@ pub enum GraphHandlerError {
     Parser(#[from] nom::error::Error<String>),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Default)]
 pub struct Node {
-    pub id: usize,
-    pub identifier: String,
-    pub labels: Vec<Rc<String>>,
+    id: usize,
+    identifier: String,
+    labels: Vec<Rc<String>>,
     pub properties: HashMap<String, CypherValue>,
 }
 
@@ -48,14 +48,27 @@ impl Node {
                 .collect(),
         }
     }
+
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn identifier(&self) -> &str {
+        self.identifier.as_str()
+    }
+
+    pub fn labels(&self) -> impl Iterator<Item = &str> {
+        self.labels.iter().map(|label| (*label).as_str())
+    }
 }
+
 #[derive(PartialEq, Debug, Default)]
 pub struct Relationship {
-    pub id: usize,
-    pub source_id: usize,
-    pub target_id: usize,
-    pub identifier: String,
-    pub rel_type: Option<Rc<String>>,
+    id: usize,
+    source_id: usize,
+    target_id: usize,
+    identifier: String,
+    rel_type: Option<Rc<String>>,
     pub properties: HashMap<String, CypherValue>,
 }
 
@@ -74,6 +87,26 @@ impl Relationship {
                 .collect::<HashMap<_, _>>(),
             ..Relationship::default()
         }
+    }
+
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn source_id(&self) -> usize {
+        self.source_id
+    }
+
+    pub fn target_id(&self) -> usize {
+        self.target_id
+    }
+
+    pub fn identifier(&self) -> &str {
+        self.identifier.as_str()
+    }
+
+    pub fn rel_type(&self) -> Option<&str> {
+        self.rel_type.as_ref().map(|rel_type| (**rel_type).as_str())
     }
 }
 
@@ -109,7 +142,7 @@ impl Graph {
     /// assert_eq!(alice.properties.get("age"), Some(&CypherValue::from(23)));
     ///
     /// let relationship = graph.get_relationship("r").unwrap();
-    /// assert_eq!(relationship.rel_type, Some(Rc::new(String::from("KNOWS"))));
+    /// assert_eq!(relationship.rel_type(), Some("KNOWS"));
     /// ```
     pub fn from(input: &str) -> Result<Self, GraphHandlerError> {
         let mut graph_handler = Self::default();
@@ -181,8 +214,8 @@ impl Graph {
     ///
     /// let n0 = graph.get_node("n0").unwrap();
     ///
-    /// assert_eq!(n0.identifier, String::from("n0"));
-    /// assert_eq!(n0.labels, vec![Rc::new(String::from("A")), Rc::new(String::from("B"))]);
+    /// assert_eq!(n0.identifier(), String::from("n0"));
+    /// assert_eq!(n0.labels().collect::<Vec<_>>(), vec!["A", "B"]);
     /// assert_eq!(n0.properties.get("foo").unwrap(), &CypherValue::from(42));
     /// ```
     pub fn get_node(&self, identifier: &str) -> Option<&Node> {
@@ -202,8 +235,8 @@ impl Graph {
     ///
     /// let r0 = graph.get_relationship("r0").unwrap();
     ///
-    /// assert_eq!(r0.identifier, String::from("r0"));
-    /// assert_eq!(r0.rel_type, Some(Rc::new(String::from("REL"))));
+    /// assert_eq!(r0.identifier(), String::from("r0"));
+    /// assert_eq!(r0.rel_type(), Some("REL"));
     /// assert_eq!(r0.properties.get("bar").unwrap(), &CypherValue::from(13.37));
     /// ```
     pub fn get_relationship(&self, identifier: &str) -> Option<&Relationship> {
@@ -456,6 +489,44 @@ mod tests {
         assert_eq!(graph_handler.relationship_count(), 3);
         assert!(graph_handler.get_relationship("r0").is_some());
         assert!(graph_handler.get_relationship("r1").is_some());
+    }
+
+    #[test]
+    fn node_api() {
+        let mut properties = HashMap::<String, CypherValue>::new();
+        properties.insert("foo".to_string(), CypherValue::from(42));
+
+        let n = Node {
+            id: 42,
+            identifier: "n42".into(),
+            labels: vec![Rc::new("A".into()), Rc::new("B".into())],
+            properties,
+        };
+
+        assert_eq!(n.id(), 42);
+        assert_eq!(n.identifier(), "n42");
+        assert_eq!(n.labels().collect::<Vec<_>>(), vec!["A", "B"]);
+    }
+
+    #[test]
+    fn relationship_api() {
+        let mut properties = HashMap::<String, CypherValue>::new();
+        properties.insert("foo".into(), CypherValue::from(42));
+
+        let r = Relationship {
+            id: 42,
+            source_id: 13,
+            target_id: 37,
+            identifier: "r42".to_string(),
+            rel_type: Some(Rc::new("REL".to_string())),
+            properties,
+        };
+
+        assert_eq!(r.id(), 42);
+        assert_eq!(r.source_id(), 13);
+        assert_eq!(r.target_id(), 37);
+        assert_eq!(r.identifier(), "r42");
+        assert_eq!(r.rel_type(), Some("REL"));
     }
 
     #[test]
