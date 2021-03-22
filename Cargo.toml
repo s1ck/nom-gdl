@@ -6,7 +6,7 @@ description = "Graph Definition Language"
 keywords = ["graph", "cypher", "parser", "nom"]
 name = "gdl"
 repository = "https://github.com/s1ck/nom-gdl"
-version = "0.2.1"
+version = "0.2.2"
 
 [dependencies]
 nom = "6"
