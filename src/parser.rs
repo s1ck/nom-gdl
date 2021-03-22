@@ -12,19 +12,19 @@ use nom::{
 };
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Node {
-    pub(crate) identifier: Option<String>,
+    pub(crate) variable: Option<String>,
     pub(crate) labels: Vec<String>,
     pub(crate) properties: HashMap<String, CypherValue>,
 }
 
 impl Node {
     pub fn new(
-        identifier: Option<String>,
+        variable: Option<String>,
         labels: Vec<String>,
         properties: HashMap<String, CypherValue>,
     ) -> Self {
         Self {
-            identifier,
+            variable,
             labels,
             properties,
         }
@@ -39,14 +39,14 @@ impl
     )> for Node
 {
     fn from(
-        (identifier, labels, properties): (
+        (variable, labels, properties): (
             Option<String>,
             Vec<String>,
             Option<HashMap<String, CypherValue>>,
         ),
     ) -> Self {
         Node {
-            identifier,
+            variable,
             labels,
             properties: properties.unwrap_or_default(),
         }
@@ -69,7 +69,7 @@ impl FromStr for Node {
 
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Relationship {
-    pub(crate) identifier: Option<String>,
+    pub(crate) variable: Option<String>,
     pub(crate) rel_type: Option<String>,
     pub(crate) direction: Direction,
     pub(crate) properties: HashMap<String, CypherValue>,
@@ -88,12 +88,12 @@ impl Default for Direction {
 
 impl Relationship {
     fn outgoing(
-        identifier: Option<String>,
+        variable: Option<String>,
         rel_type: Option<String>,
         properties: HashMap<String, CypherValue>,
     ) -> Self {
         Relationship {
-            identifier,
+            variable,
             rel_type,
             direction: Direction::Outgoing,
             properties,
@@ -101,12 +101,12 @@ impl Relationship {
     }
 
     fn incoming(
-        identifier: Option<String>,
+        variable: Option<String>,
         rel_type: Option<String>,
         properties: HashMap<String, CypherValue>,
     ) -> Self {
         Relationship {
-            identifier,
+            variable,
             rel_type,
             direction: Direction::Incoming,
             properties,
@@ -296,7 +296,7 @@ fn cypher_value(input: &str) -> IResult<&str, CypherValue> {
     preceded(sp, alt((float_literal, integer_literal, string_literal)))(input)
 }
 
-fn identifier(input: &str) -> IResult<&str, String> {
+fn variable(input: &str) -> IResult<&str, String> {
     map(
         preceded(
             sp,
@@ -311,7 +311,7 @@ fn identifier(input: &str) -> IResult<&str, String> {
 
 fn key_value_pair(input: &str) -> IResult<&str, (String, CypherValue)> {
     pair(
-        identifier,
+        variable,
         preceded(preceded(sp, tag(":")), cut(cypher_value)),
     )(input)
 }
@@ -375,7 +375,7 @@ fn node_body(
 > {
     delimited(
         sp,
-        tuple((opt(identifier), many0(label), opt(properties))),
+        tuple((opt(variable), many0(label), opt(properties))),
         sp,
     )(input)
 }
@@ -398,7 +398,7 @@ fn relationship_body(
         tag("["),
         delimited(
             sp,
-            tuple((opt(identifier), opt(rel_type), opt(properties))),
+            tuple((opt(variable), opt(rel_type), opt(properties))),
             sp,
         ),
         tag("]"),
@@ -410,8 +410,8 @@ pub(crate) fn relationship(input: &str) -> IResult<&str, Relationship> {
         map(
             delimited(tag("-"), opt(relationship_body), tag("->")),
             |relationship| match relationship {
-                Some((identifier, rel_type, properties)) => {
-                    Relationship::outgoing(identifier, rel_type, properties.unwrap_or_default())
+                Some((variable, rel_type, properties)) => {
+                    Relationship::outgoing(variable, rel_type, properties.unwrap_or_default())
                 }
                 None => Relationship::outgoing(None, None, HashMap::default()),
             },
@@ -419,8 +419,8 @@ pub(crate) fn relationship(input: &str) -> IResult<&str, Relationship> {
         map(
             delimited(tag("<-"), opt(relationship_body), tag("-")),
             |relationship| match relationship {
-                Some((identifier, rel_type, properties)) => {
-                    Relationship::incoming(identifier, rel_type, properties.unwrap_or_default())
+                Some((variable, rel_type, properties)) => {
+                    Relationship::incoming(variable, rel_type, properties.unwrap_or_default())
                 }
                 None => Relationship::incoming(None, None, HashMap::default()),
             },
@@ -446,9 +446,9 @@ mod tests {
     use test_case::test_case;
 
     impl Node {
-        fn with_identifier(identifier: impl Into<String>) -> Self {
+        fn with_variable(variable: impl Into<String>) -> Self {
             Node {
-                identifier: Some(identifier.into()),
+                variable: Some(variable.into()),
                 ..Node::default()
             }
         }
@@ -464,20 +464,20 @@ mod tests {
             }
         }
 
-        fn with_identifier_and_labels<I, T>(identifier: impl Into<String>, labels: I) -> Self
+        fn with_variable_and_labels<I, T>(variable: impl Into<String>, labels: I) -> Self
         where
             I: IntoIterator<Item = T>,
             T: Into<String>,
         {
             Node {
-                identifier: Some(identifier.into()),
+                variable: Some(variable.into()),
                 labels: labels.into_iter().map(Into::into).collect(),
                 ..Node::default()
             }
         }
 
         fn from<I, T>(
-            identifier: impl Into<String>,
+            variable: impl Into<String>,
             labels: I,
             properties: Vec<(T, CypherValue)>,
         ) -> Self
@@ -486,7 +486,7 @@ mod tests {
             T: Into<String>,
         {
             Node {
-                identifier: Some(identifier.into()),
+                variable: Some(variable.into()),
                 labels: labels.into_iter().map(Into::into).collect(),
                 properties: properties
                     .into_iter()
@@ -497,38 +497,38 @@ mod tests {
     }
 
     impl Relationship {
-        fn outgoing_with_identifier(identifier: impl Into<String>) -> Self {
-            Self::outgoing(Some(identifier.into()), None, HashMap::default())
+        fn outgoing_with_variable(variable: impl Into<String>) -> Self {
+            Self::outgoing(Some(variable.into()), None, HashMap::default())
         }
 
-        fn outgoing_with_identifier_and_rel_type(
-            identifier: impl Into<String>,
+        fn outgoing_with_variable_and_rel_type(
+            variable: impl Into<String>,
             rel_type: impl Into<String>,
         ) -> Self {
             Self::outgoing(
-                Some(identifier.into()),
+                Some(variable.into()),
                 Some(rel_type.into()),
                 HashMap::default(),
             )
         }
 
-        fn incoming_with_identifier(identifier: impl Into<String>) -> Self {
-            Self::incoming(Some(identifier.into()), None, HashMap::default())
+        fn incoming_with_variable(variable: impl Into<String>) -> Self {
+            Self::incoming(Some(variable.into()), None, HashMap::default())
         }
 
-        fn incoming_with_identifier_and_rel_type(
-            identifier: impl Into<String>,
+        fn incoming_with_variable_and_rel_type(
+            variable: impl Into<String>,
             rel_type: impl Into<String>,
         ) -> Self {
             Self::incoming(
-                Some(identifier.into()),
+                Some(variable.into()),
                 Some(rel_type.into()),
                 HashMap::default(),
             )
         }
 
         fn from<I, T>(
-            identifier: impl Into<String>,
+            variable: impl Into<String>,
             rel_type: T,
             direction: Direction,
             properties: Vec<(T, CypherValue)>,
@@ -537,7 +537,7 @@ mod tests {
             T: Into<String>,
         {
             Relationship {
-                identifier: Some(identifier.into()),
+                variable: Some(variable.into()),
                 rel_type: Some(rel_type.into()),
                 direction,
                 properties: properties
@@ -603,8 +603,8 @@ mod tests {
     #[test_case("f"; "single alphabetical lowercase")]
     #[test_case("F"; "single alphabetical uppercase")]
     #[test_case("f1234"; "alphanumeric")]
-    fn identifiers_positive(input: &str) {
-        let result = identifier(input);
+    fn variable_positive(input: &str) {
+        let result = variable(input);
         assert!(result.is_ok());
         let result = result.unwrap().1;
         assert_eq!(result, input)
@@ -613,8 +613,8 @@ mod tests {
     #[test_case("1234"; "numerical")]
     #[test_case("+foo"; "special char")]
     #[test_case("."; "another special char")]
-    fn identifiers_negative(input: &str) {
-        assert!(identifier(input).is_err())
+    fn variable_negative(input: &str) {
+        assert!(variable(input).is_err())
     }
 
     #[test_case(":Foobar"; "alphabetical")]
@@ -650,21 +650,21 @@ mod tests {
     #[test_case("()",                   Node::default(); "empty node")]
     #[test_case("( )",                  Node::default(); "empty node with space")]
     #[test_case("(  )",                 Node::default(); "empty node with many spaces")]
-    #[test_case("(n0)",                 Node::with_identifier("n0"); "n0")]
-    #[test_case("( n0 )",               Node::with_identifier("n0"); "n0 with space")]
+    #[test_case("(n0)",                 Node::with_variable("n0"); "n0")]
+    #[test_case("( n0 )",               Node::with_variable("n0"); "n0 with space")]
     #[test_case("(:A)",                 Node::with_labels(vec!["A"]))]
     #[test_case("(:A:B)",               Node::with_labels(vec!["A", "B"]) )]
     #[test_case("( :A:B )",             Node::with_labels(vec!["A", "B"]); ":A:B with space" )]
-    #[test_case("(n0:A)",               Node::with_identifier_and_labels("n0", vec!["A"]))]
-    #[test_case("(n0:A:B)",             Node::with_identifier_and_labels("n0", vec!["A", "B"]))]
-    #[test_case("( n0:A:B )",           Node::with_identifier_and_labels("n0", vec!["A", "B"]); "n0:A:B with space")]
+    #[test_case("(n0:A)",               Node::with_variable_and_labels("n0", vec!["A"]))]
+    #[test_case("(n0:A:B)",             Node::with_variable_and_labels("n0", vec!["A", "B"]))]
+    #[test_case("( n0:A:B )",           Node::with_variable_and_labels("n0", vec!["A", "B"]); "n0:A:B with space")]
     #[test_case("(n0 { foo: 42 })",     Node::from("n0", vec![], vec![("foo", CypherValue::from(42))]))]
     #[test_case("(n0:A:B { foo: 42 })", Node::from("n0", vec!["A", "B"], vec![("foo", CypherValue::from(42))]))]
     fn node_test(input: &str, expected: Node) {
         assert_eq!(input.parse(), Ok(expected));
     }
 
-    #[test_case("(42:A)" ; "numeric identifier")]
+    #[test_case("(42:A)" ; "numeric variable")]
     #[test_case("("      ; "no closing")]
     #[test_case(")"      ; "no opening")]
     fn node_negative(input: &str) {
@@ -677,22 +677,22 @@ mod tests {
     #[test_case("<--",                     Relationship { direction: Direction::Incoming, ..Relationship::default()}; "incoming: no body")]
     #[test_case("<-[]-",                   Relationship { direction: Direction::Incoming, ..Relationship::default()}; "incoming: with body")]
     #[test_case("<-[ ]-",                  Relationship { direction: Direction::Incoming, ..Relationship::default()}; "incoming: body with space")]
-    #[test_case("-[r0]->",                 Relationship { identifier: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0 outgoing")]
-    #[test_case("-[ r0 ]->",               Relationship { identifier: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0 outgoing with space")]
-    #[test_case("<-[r0]-",                 Relationship { identifier: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0 incoming")]
-    #[test_case("<-[ r0 ]-",               Relationship { identifier: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0 incoming with space")]
+    #[test_case("-[r0]->",                 Relationship { variable: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0 outgoing")]
+    #[test_case("-[ r0 ]->",               Relationship { variable: Some("r0".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0 outgoing with space")]
+    #[test_case("<-[r0]-",                 Relationship { variable: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0 incoming")]
+    #[test_case("<-[ r0 ]-",               Relationship { variable: Some("r0".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0 incoming with space")]
     #[test_case("-[:BAR]->",               Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "BAR outgoing")]
     #[test_case("-[ :BAR ]->",             Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "BAR outgoing with space")]
     #[test_case("<-[:BAR]-",               Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "BAR incoming")]
     #[test_case("<-[ :BAR ]-",             Relationship { rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "BAR incoming with space")]
-    #[test_case("-[r0:BAR]->",             Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0:Bar outgoing")]
-    #[test_case("-[ r0:BAR ]->",           Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default()};  "r0:Bar outgoing with space")]
-    #[test_case("<-[r0:BAR]-",             Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0:Bar incoming")]
-    #[test_case("<-[ r0:BAR ]-",           Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0:Bar incoming with space")]
-    #[test_case("<-[{ foo: 42 }]-",        Relationship { identifier: None, rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "with properties")]
-    #[test_case("<-[r0 { foo: 42 }]-",     Relationship { identifier: Some("r0".to_string()), rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "r0 with properties")]
-    #[test_case("<-[:BAR { foo: 42 }]-",   Relationship { identifier: None, rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "Bar with properties")]
-    #[test_case("<-[r0:BAR { foo: 42 }]-", Relationship { identifier: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "r0:Bar with properties")]
+    #[test_case("-[r0:BAR]->",             Relationship { variable: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default() }; "r0:Bar outgoing")]
+    #[test_case("-[ r0:BAR ]->",           Relationship { variable: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Outgoing, ..Relationship::default()};  "r0:Bar outgoing with space")]
+    #[test_case("<-[r0:BAR]-",             Relationship { variable: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0:Bar incoming")]
+    #[test_case("<-[ r0:BAR ]-",           Relationship { variable: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, ..Relationship::default() }; "r0:Bar incoming with space")]
+    #[test_case("<-[{ foo: 42 }]-",        Relationship { variable: None, rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "with properties")]
+    #[test_case("<-[r0 { foo: 42 }]-",     Relationship { variable: Some("r0".to_string()), rel_type: None, direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "r0 with properties")]
+    #[test_case("<-[:BAR { foo: 42 }]-",   Relationship { variable: None, rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "Bar with properties")]
+    #[test_case("<-[r0:BAR { foo: 42 }]-", Relationship { variable: Some("r0".to_string()), rel_type: Some("BAR".to_string()), direction: Direction::Incoming, properties: std::iter::once(("foo".to_string(), CypherValue::from(42))).into_iter().collect::<HashMap<_,_>>() }; "r0:Bar with properties")]
     fn relationship_test(input: &str, expected: Relationship) {
         assert_eq!(input.parse(), Ok(expected));
     }
@@ -712,7 +712,7 @@ mod tests {
         assert_eq!(
             "(a)".parse(),
             Ok(Path {
-                start: Node::with_identifier("a"),
+                start: Node::with_variable("a"),
                 elements: vec![]
             })
         );
@@ -723,10 +723,10 @@ mod tests {
         assert_eq!(
             "(a)-->(b)".parse(),
             Ok(Path {
-                start: Node::with_identifier("a"),
+                start: Node::with_variable("a"),
                 elements: vec![(
                     Relationship::outgoing(None, None, HashMap::default()),
-                    Node::with_identifier("b")
+                    Node::with_variable("b")
                 )]
             })
         );
@@ -737,15 +737,15 @@ mod tests {
         assert_eq!(
             "(a)-->(b)<--(c)".parse(),
             Ok(Path {
-                start: Node::with_identifier("a"),
+                start: Node::with_variable("a"),
                 elements: vec![
                     (
                         Relationship::outgoing(None, None, HashMap::default()),
-                        Node::with_identifier("b")
+                        Node::with_variable("b")
                     ),
                     (
                         Relationship::incoming(None, None, HashMap::default()),
-                        Node::with_identifier("c")
+                        Node::with_variable("c")
                     ),
                 ]
             })
@@ -757,19 +757,19 @@ mod tests {
         assert_eq!(
             "(a:A)<-[:R]-(:B)-[rel]->(c)-[]->(d:D1:D2)<--(:E1:E2)-[r:REL]->()".parse(),
             Ok(Path {
-                start: Node::with_identifier_and_labels("a", vec!["A"]),
+                start: Node::with_variable_and_labels("a", vec!["A"]),
                 elements: vec![
                     (
                         Relationship::incoming(None, Some("R".to_string()), HashMap::default()),
                         Node::new(None, vec!["B".to_string()], HashMap::default())
                     ),
                     (
-                        Relationship::outgoing_with_identifier("rel"),
-                        Node::with_identifier("c")
+                        Relationship::outgoing_with_variable("rel"),
+                        Node::with_variable("c")
                     ),
                     (
                         Relationship::outgoing(None, None, HashMap::default()),
-                        Node::with_identifier_and_labels("d", vec!["D1", "D2"])
+                        Node::with_variable_and_labels("d", vec!["D1", "D2"])
                     ),
                     (
                         Relationship::incoming(None, None, HashMap::default()),
@@ -780,7 +780,7 @@ mod tests {
                         )
                     ),
                     (
-                        Relationship::outgoing_with_identifier_and_rel_type("r", "REL"),
+                        Relationship::outgoing_with_variable_and_rel_type("r", "REL"),
                         Node::default()
                     ),
                 ]
@@ -788,8 +788,8 @@ mod tests {
         );
     }
 
-    #[test_case("(42:A)" ; "numeric identifier")]
-    #[test_case("(a)-->(42:A)" ; "numeric identifier one hop")]
+    #[test_case("(42:A)" ; "numeric variable")]
+    #[test_case("(a)-->(42:A)" ; "numeric variable one hop")]
     fn path_negative(input: &str) {
         assert!(input.parse::<Path>().is_err())
     }
@@ -799,10 +799,10 @@ mod tests {
         pretty_assert_eq!(
             "(a)-->(b)".parse(),
             Ok(Graph::new(vec![Path {
-                start: Node::with_identifier("a"),
+                start: Node::with_variable("a"),
                 elements: vec![(
                     Relationship::outgoing(None, None, HashMap::default()),
-                    Node::with_identifier("b")
+                    Node::with_variable("b")
                 )]
             }]))
         );
@@ -826,11 +826,11 @@ mod tests {
             input.parse(),
             Ok(Graph::new(vec![
                 Path {
-                    start: Node::with_identifier("a"),
+                    start: Node::with_variable("a"),
                     elements: vec![]
                 },
                 Path {
-                    start: Node::with_identifier("b"),
+                    start: Node::with_variable("b"),
                     elements: vec![]
                 }
             ]))
@@ -842,7 +842,7 @@ mod tests {
         pretty_assert_eq!(
             "(a),".parse(),
             Ok(Graph::new(vec![Path {
-                start: Node::with_identifier("a"),
+                start: Node::with_variable("a"),
                 elements: vec![]
             }]))
         );

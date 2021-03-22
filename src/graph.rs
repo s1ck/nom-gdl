@@ -23,7 +23,7 @@ pub enum GraphHandlerError {
 #[derive(PartialEq, Debug, Default)]
 pub struct Node {
     id: usize,
-    identifier: String,
+    variable: String,
     labels: Vec<Rc<String>>,
     pub properties: HashMap<String, CypherValue>,
 }
@@ -33,8 +33,8 @@ impl Node {
         self.id
     }
 
-    pub fn identifier(&self) -> &str {
-        self.identifier.as_str()
+    pub fn variable(&self) -> &str {
+        self.variable.as_str()
     }
 
     pub fn labels(&self) -> impl Iterator<Item = &str> {
@@ -59,7 +59,7 @@ pub struct Relationship {
     id: usize,
     source_id: usize,
     target_id: usize,
-    identifier: String,
+    variable: String,
     rel_type: Option<Rc<String>>,
     properties: HashMap<String, CypherValue>,
 }
@@ -77,8 +77,8 @@ impl Relationship {
         self.target_id
     }
 
-    pub fn identifier(&self) -> &str {
-        self.identifier.as_str()
+    pub fn variable(&self) -> &str {
+        self.variable.as_str()
     }
 
     pub fn rel_type(&self) -> Option<&str> {
@@ -189,7 +189,7 @@ impl Graph {
         self.relationship_cache.len()
     }
 
-    /// Returns the node for the given identifier.
+    /// Returns the node for the given variable.
     ///
     /// Example:
     ///
@@ -202,15 +202,15 @@ impl Graph {
     ///
     /// let n0 = graph.get_node("n0").unwrap();
     ///
-    /// assert_eq!(n0.identifier(), String::from("n0"));
+    /// assert_eq!(n0.variable(), String::from("n0"));
     /// assert_eq!(n0.labels().collect::<Vec<_>>(), vec!["A", "B"]);
     /// assert_eq!(n0.properties.get("foo").unwrap(), &CypherValue::from(42));
     /// ```
-    pub fn get_node(&self, identifier: &str) -> Option<&Node> {
-        self.node_cache.get(identifier)
+    pub fn get_node(&self, variable: &str) -> Option<&Node> {
+        self.node_cache.get(variable)
     }
 
-    /// Returns the relationship for the given identifier.
+    /// Returns the relationship for the given variable.
     ///
     /// Example:
     ///
@@ -223,12 +223,12 @@ impl Graph {
     ///
     /// let r0 = graph.get_relationship("r0").unwrap();
     ///
-    /// assert_eq!(r0.identifier(), String::from("r0"));
+    /// assert_eq!(r0.variable(), String::from("r0"));
     /// assert_eq!(r0.rel_type(), Some("REL"));
     /// assert_eq!(r0.property_value("bar").unwrap(), &CypherValue::from(13.37));
     /// ```
-    pub fn get_relationship(&self, identifier: &str) -> Option<&Relationship> {
-        self.relationship_cache.get(identifier)
+    pub fn get_relationship(&self, variable: &str) -> Option<&Relationship> {
+        self.relationship_cache.get(variable)
     }
 
     /// Returns an iterator of nodes contained in the graph.
@@ -269,17 +269,17 @@ impl Graph {
 impl Graph {
     fn convert_node(&mut self, parse_node: ParseNode) -> Result<&Node, GraphHandlerError> {
         // if the node is not in the cache, we
-        // use the next_id as node id and identifier
+        // use the next_id as node id and variable
         let next_id = self.node_cache.len();
 
-        let identifier = match parse_node.identifier {
-            Some(identifier) => identifier,
+        let variable = match parse_node.variable {
+            Some(variable) => variable,
             None => format!("__v{}", next_id),
         };
 
         let token_cache = &mut self.token_cache;
 
-        match self.node_cache.entry(identifier) {
+        match self.node_cache.entry(variable) {
             Entry::Occupied(entry) => {
                 // verify that parse node has no additional content
                 if parse_node.labels.len() > 0 {
@@ -288,7 +288,7 @@ impl Graph {
                 Ok(entry.into_mut())
             }
             Entry::Vacant(entry) => {
-                let identifier = entry.key().clone();
+                let variable = entry.key().clone();
                 let labels = parse_node
                     .labels
                     .into_iter()
@@ -303,7 +303,7 @@ impl Graph {
 
                 let new_node = Node {
                     id: next_id,
-                    identifier,
+                    variable,
                     labels,
                     properties: parse_node.properties,
                 };
@@ -319,20 +319,20 @@ impl Graph {
     ) -> Result<&mut Relationship, GraphHandlerError> {
         let next_id = self.relationship_cache.len();
 
-        let identifier = match parse_relationship.identifier {
-            Some(identifier) => identifier,
+        let variable = match parse_relationship.variable {
+            Some(variable) => variable,
             None => format!("__r{}", next_id),
         };
 
         let token_cache = &mut self.token_cache;
 
-        match self.relationship_cache.entry(identifier) {
+        match self.relationship_cache.entry(variable) {
             Entry::Occupied(entry) => {
                 // Relationships can not be referenced multiple times.
                 Err(GraphHandlerError::InvalidReference(entry.key().clone()))
             }
             Entry::Vacant(entry) => {
-                let identifier = entry.key().clone();
+                let variable = entry.key().clone();
 
                 let rel_type =
                     parse_relationship
@@ -349,7 +349,7 @@ impl Graph {
                     id: next_id,
                     source_id: usize::default(),
                     target_id: usize::default(),
-                    identifier,
+                    variable,
                     rel_type,
                     properties: parse_relationship.properties,
                 };
@@ -399,12 +399,12 @@ mod tests {
 
     impl Node {
         fn new(
-            identifier: &str,
+            variable: &str,
             labels: Vec<impl Into<String>>,
             properties: HashMap<impl Into<String>, CypherValue>,
         ) -> Self {
             Self {
-                identifier: identifier.to_string(),
+                variable: variable.to_string(),
                 labels: labels
                     .into_iter()
                     .map(|label| Rc::new(label.into()))
@@ -419,16 +419,12 @@ mod tests {
     }
 
     impl Relationship {
-        fn new<T>(
-            identifier: T,
-            rel_type: Option<&str>,
-            properties: HashMap<T, CypherValue>,
-        ) -> Self
+        fn new<T>(variable: T, rel_type: Option<&str>, properties: HashMap<T, CypherValue>) -> Self
         where
             T: Into<String>,
         {
             Self {
-                identifier: identifier.into(),
+                variable: variable.into(),
                 rel_type: rel_type.map(|s| Rc::new(s.to_string())),
                 properties: properties
                     .into_iter()
@@ -440,9 +436,9 @@ mod tests {
     }
 
     #[test_case("()", Node::new("__v0", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "empty")]
-    #[test_case("(a)", Node::new("a", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "identifier only")]
+    #[test_case("(a)", Node::new("a", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "variable only")]
     #[test_case("(:A)", Node::new("__v0", vec!["A"], HashMap::<String, CypherValue>::new()) ; "label only")]
-    #[test_case("(a:A)", Node::new("a", vec!["A"], HashMap::<String, CypherValue>::new()) ; "identifier and label")]
+    #[test_case("(a:A)", Node::new("a", vec!["A"], HashMap::<String, CypherValue>::new()) ; "variable and label")]
     #[test_case("(a:A { foo: 42, bar: 'foobar' })", Node::new("a", vec!["A"], vec![("foo", CypherValue::from(42)), ("bar", CypherValue::from("foobar"))].into_iter().collect::<HashMap<_,_>>()); "full")]
     fn convert_node(input: &str, expected: Node) {
         let parse_node = input.parse::<ParseNode>().unwrap();
@@ -453,9 +449,9 @@ mod tests {
     }
 
     #[test_case("-->", Relationship::new("__r0", None, HashMap::default()) ; "empty")]
-    #[test_case("-[r]->", Relationship::new("r", None, HashMap::default()) ; "identifier only")]
+    #[test_case("-[r]->", Relationship::new("r", None, HashMap::default()) ; "variable only")]
     #[test_case("-[:R]->", Relationship::new("__r0", Some("R"), HashMap::default()) ; "rel type only")]
-    #[test_case("-[r:R]->", Relationship::new("r", Some("R"), HashMap::default()) ; "identifer and rel type")]
+    #[test_case("-[r:R]->", Relationship::new("r", Some("R"), HashMap::default()) ; "variable and rel type")]
     #[test_case("-[r:R { foo: 42 }]->", Relationship::new("r", Some("R"), std::iter::once(("foo", CypherValue::from(42))).collect::<HashMap<_,_>>()) ; "full")]
     fn convert_relationship(input: &str, expected: Relationship) {
         let parse_relationship = input.parse::<ParseRelationship>().unwrap();
@@ -528,13 +524,13 @@ mod tests {
 
         let n = Node {
             id: 42,
-            identifier: "n42".into(),
+            variable: "n42".into(),
             labels: vec![Rc::new("A".into()), Rc::new("B".into())],
             properties,
         };
 
         assert_eq!(n.id(), 42);
-        assert_eq!(n.identifier(), "n42");
+        assert_eq!(n.variable(), "n42");
         assert_eq!(n.labels().collect::<Vec<_>>(), vec!["A", "B"]);
         assert_eq!(n.property_keys().collect::<Vec<_>>(), vec!["foo"]);
         assert_eq!(n.property_value("foo").unwrap(), &CypherValue::from(42));
@@ -553,7 +549,7 @@ mod tests {
             id: 42,
             source_id: 13,
             target_id: 37,
-            identifier: "r42".to_string(),
+            variable: "r42".to_string(),
             rel_type: Some(Rc::new("REL".to_string())),
             properties,
         };
@@ -561,7 +557,7 @@ mod tests {
         assert_eq!(r.id(), 42);
         assert_eq!(r.source_id(), 13);
         assert_eq!(r.target_id(), 37);
-        assert_eq!(r.identifier(), "r42");
+        assert_eq!(r.variable(), "r42");
         assert_eq!(r.rel_type(), Some("REL"));
         assert_eq!(r.property_keys().collect::<Vec<_>>(), vec!["foo"]);
         assert_eq!(r.property_value("foo").unwrap(), &CypherValue::from(42));
@@ -598,7 +594,7 @@ mod tests {
         let graph_handler = Graph::from("(a),(b),(c),(d),()").unwrap();
         let mut nodes = graph_handler
             .nodes()
-            .map(|node| node.identifier.as_str())
+            .map(|node| node.variable.as_str())
             .collect::<Vec<_>>();
         nodes.sort();
         assert_eq!(nodes, vec!["__v4", "a", "b", "c", "d"]);
@@ -609,7 +605,7 @@ mod tests {
         let graph_handler = Graph::from("()-[r1]->()-[r2]->()-->()").unwrap();
         let mut rels = graph_handler
             .relationships()
-            .map(|rel| rel.identifier.as_str())
+            .map(|rel| rel.variable.as_str())
             .collect::<Vec<_>>();
         rels.sort();
         assert_eq!(rels, vec!["__r2", "r1", "r2"]);
