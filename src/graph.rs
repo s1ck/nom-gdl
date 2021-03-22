@@ -29,26 +29,6 @@ pub struct Node {
 }
 
 impl Node {
-    fn new(
-        id: usize,
-        identifier: &str,
-        labels: Vec<impl Into<String>>,
-        properties: HashMap<impl Into<String>, CypherValue>,
-    ) -> Self {
-        Self {
-            id,
-            identifier: identifier.to_string(),
-            labels: labels
-                .into_iter()
-                .map(|label| Rc::new(label.into()))
-                .collect(),
-            properties: properties
-                .into_iter()
-                .map(|(k, v)| (Into::into(k), v))
-                .collect(),
-        }
-    }
-
     pub fn id(&self) -> usize {
         self.id
     }
@@ -73,22 +53,6 @@ pub struct Relationship {
 }
 
 impl Relationship {
-    #[cfg(test)]
-    fn new<T>(identifier: T, rel_type: Option<&str>, properties: HashMap<T, CypherValue>) -> Self
-    where
-        T: Into<String>,
-    {
-        Self {
-            identifier: identifier.into(),
-            rel_type: rel_type.map(|s| Rc::new(s.to_string())),
-            properties: properties
-                .into_iter()
-                .map(|(k, v)| (Into::into(k), v))
-                .collect::<HashMap<_, _>>(),
-            ..Relationship::default()
-        }
-    }
-
     pub fn id(&self) -> usize {
         self.id
     }
@@ -409,11 +373,53 @@ mod tests {
     use nom::error::ErrorKind;
     use test_case::test_case;
 
-    #[test_case("()", Node::new(0, "__v0", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "empty")]
-    #[test_case("(a)", Node::new(0, "a", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "identifier only")]
-    #[test_case("(:A)", Node::new(0, "__v0", vec!["A"], HashMap::<String, CypherValue>::new()) ; "label only")]
-    #[test_case("(a:A)", Node::new(0, "a", vec!["A"], HashMap::<String, CypherValue>::new()) ; "identifier and label")]
-    #[test_case("(a:A { foo: 42, bar: 'foobar' })", Node::new(0, "a", vec!["A"], vec![("foo", CypherValue::from(42)), ("bar", CypherValue::from("foobar"))].into_iter().collect::<HashMap<_,_>>()); "full")]
+    impl Node {
+        fn new(
+            identifier: &str,
+            labels: Vec<impl Into<String>>,
+            properties: HashMap<impl Into<String>, CypherValue>,
+        ) -> Self {
+            Self {
+                identifier: identifier.to_string(),
+                labels: labels
+                    .into_iter()
+                    .map(|label| Rc::new(label.into()))
+                    .collect(),
+                properties: properties
+                    .into_iter()
+                    .map(|(k, v)| (Into::into(k), v))
+                    .collect(),
+                ..Node::default()
+            }
+        }
+    }
+
+    impl Relationship {
+        fn new<T>(
+            identifier: T,
+            rel_type: Option<&str>,
+            properties: HashMap<T, CypherValue>,
+        ) -> Self
+        where
+            T: Into<String>,
+        {
+            Self {
+                identifier: identifier.into(),
+                rel_type: rel_type.map(|s| Rc::new(s.to_string())),
+                properties: properties
+                    .into_iter()
+                    .map(|(k, v)| (Into::into(k), v))
+                    .collect::<HashMap<_, _>>(),
+                ..Relationship::default()
+            }
+        }
+    }
+
+    #[test_case("()", Node::new("__v0", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "empty")]
+    #[test_case("(a)", Node::new("a", Vec::<String>::new(), HashMap::<String, CypherValue>::new()) ; "identifier only")]
+    #[test_case("(:A)", Node::new("__v0", vec!["A"], HashMap::<String, CypherValue>::new()) ; "label only")]
+    #[test_case("(a:A)", Node::new("a", vec!["A"], HashMap::<String, CypherValue>::new()) ; "identifier and label")]
+    #[test_case("(a:A { foo: 42, bar: 'foobar' })", Node::new("a", vec!["A"], vec![("foo", CypherValue::from(42)), ("bar", CypherValue::from("foobar"))].into_iter().collect::<HashMap<_,_>>()); "full")]
     fn convert_node(input: &str, expected: Node) {
         let parse_node = input.parse::<ParseNode>().unwrap();
         let mut graph_handler = Graph::default();
