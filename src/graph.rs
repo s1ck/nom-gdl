@@ -57,9 +57,9 @@ impl Node {
 #[derive(PartialEq, Debug, Default)]
 pub struct Relationship {
     id: usize,
-    source_id: usize,
-    target_id: usize,
     variable: String,
+    source: String,
+    target: String,
     rel_type: Option<Rc<String>>,
     properties: HashMap<String, CypherValue>,
 }
@@ -69,12 +69,12 @@ impl Relationship {
         self.id
     }
 
-    pub fn source_id(&self) -> usize {
-        self.source_id
+    pub fn source(&self) -> &str {
+        self.source.as_str()
     }
 
-    pub fn target_id(&self) -> usize {
-        self.target_id
+    pub fn target(&self) -> &str {
+        self.target.as_str()
     }
 
     pub fn variable(&self) -> &str {
@@ -347,8 +347,8 @@ impl Graph {
 
                 let new_relationship = Relationship {
                     id: next_id,
-                    source_id: usize::default(),
-                    target_id: usize::default(),
+                    source: String::default(),
+                    target: String::default(),
                     variable,
                     rel_type,
                     properties: parse_relationship.properties,
@@ -360,21 +360,21 @@ impl Graph {
     }
 
     fn convert_path(&mut self, parse_path: ParsePath) -> Result<(), GraphHandlerError> {
-        let mut first_node_id = self.convert_node(parse_path.start)?.id;
+        let mut first_node_id = self.convert_node(parse_path.start)?.variable.clone();
 
         for (parse_rel, parse_node) in parse_path.elements.into_iter() {
             let direction = parse_rel.direction;
-            let second_node_id = self.convert_node(parse_node)?.id;
+            let second_node_id = self.convert_node(parse_node)?.variable.clone();
             let relationship = self.convert_relationship(parse_rel)?;
 
             match direction {
                 Direction::Outgoing => {
-                    relationship.source_id = first_node_id;
-                    relationship.target_id = second_node_id;
+                    relationship.source = first_node_id;
+                    relationship.target = second_node_id.clone();
                 }
                 Direction::Incoming => {
-                    relationship.source_id = second_node_id;
-                    relationship.target_id = first_node_id;
+                    relationship.source = second_node_id.clone();
+                    relationship.target = first_node_id;
                 }
             }
 
@@ -474,10 +474,10 @@ mod tests {
         let rel_r1 = graph_handler.relationship_cache.get("r1").unwrap();
         let rel_r2 = graph_handler.relationship_cache.get("r2").unwrap();
 
-        assert_eq!(node_a.id, rel_r1.source_id);
-        assert_eq!(node_b.id, rel_r1.target_id);
-        assert_eq!(node_b.id, rel_r2.target_id);
-        assert_eq!(node_a.id, rel_r1.source_id);
+        assert_eq!(node_a.variable(), rel_r1.source());
+        assert_eq!(node_b.variable(), rel_r1.target());
+        assert_eq!(node_b.variable(), rel_r2.target());
+        assert_eq!(node_a.variable(), rel_r1.source());
     }
 
     #[test]
@@ -491,10 +491,10 @@ mod tests {
         let rel_r1 = graph_handler.relationship_cache.get("r1").unwrap();
         let rel_r2 = graph_handler.relationship_cache.get("r2").unwrap();
 
-        assert_eq!(node_a.id, rel_r1.source_id);
-        assert_eq!(node_b.id, rel_r1.target_id);
-        assert_eq!(node_b.id, rel_r2.target_id);
-        assert_eq!(node_a.id, rel_r1.source_id);
+        assert_eq!(node_a.variable(), rel_r1.source());
+        assert_eq!(node_b.variable(), rel_r1.target());
+        assert_eq!(node_b.variable(), rel_r2.target());
+        assert_eq!(node_a.variable(), rel_r1.source());
     }
 
     #[test]
@@ -547,16 +547,16 @@ mod tests {
 
         let r = Relationship {
             id: 42,
-            source_id: 13,
-            target_id: 37,
+            source: String::from("n13"),
+            target: String::from("n37"),
             variable: "r42".to_string(),
             rel_type: Some(Rc::new("REL".to_string())),
             properties,
         };
 
         assert_eq!(r.id(), 42);
-        assert_eq!(r.source_id(), 13);
-        assert_eq!(r.target_id(), 37);
+        assert_eq!(r.source(), "n13");
+        assert_eq!(r.target(), "n37");
         assert_eq!(r.variable(), "r42");
         assert_eq!(r.rel_type(), Some("REL"));
         assert_eq!(r.property_keys().collect::<Vec<_>>(), vec!["foo"]);
