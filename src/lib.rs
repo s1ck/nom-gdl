@@ -136,3 +136,8 @@ pub use graph::Node;
 pub use graph::Relationship;
 
 pub use parser::CypherValue;
+
+#[cfg(doctest)]
+mod tests {
+    doc_comment::doctest!("../README.md");
+}
