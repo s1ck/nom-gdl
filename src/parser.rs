@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 use nom::{
     branch::alt,
@@ -226,6 +226,16 @@ impl FromStr for CypherValue {
                 input: input.to_string(),
                 code,
             }),
+        }
+    }
+}
+
+impl Display for CypherValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CypherValue::Float(float) => write!(f, "{}", float),
+            CypherValue::Integer(integer) => write!(f, "{}", integer),
+            CypherValue::String(string) => f.pad(string),
         }
     }
 }
@@ -578,6 +588,14 @@ mod tests {
         assert_eq!(CypherValue::from(42), CypherValue::from(42));
         assert_eq!(CypherValue::from(13.37), CypherValue::from(13.37));
         assert_eq!(CypherValue::from("foobar"), CypherValue::from("foobar"))
+    }
+
+    #[test]
+    fn cypher_value_display() {
+        assert_eq!("42", format!("{}", CypherValue::from(42)));
+        assert_eq!("13.37", format!("{}", CypherValue::from(13.37)));
+        assert_eq!("foobar", format!("{}", CypherValue::from("foobar")));
+        assert_eq!("00foobar", format!("{:0>8}", CypherValue::from("foobar")));
     }
 
     #[test_case("key:42",         ("key".to_string(), CypherValue::from(42)))]
