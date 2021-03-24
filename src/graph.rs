@@ -23,7 +23,7 @@ pub enum GraphHandlerError {
 #[derive(PartialEq, Debug, Default)]
 pub struct Node {
     id: usize,
-    variable: String,
+    variable: Rc<String>,
     labels: Vec<Rc<String>>,
     properties: HashMap<String, CypherValue>,
 }
@@ -57,9 +57,9 @@ impl Node {
 #[derive(PartialEq, Debug, Default)]
 pub struct Relationship {
     id: usize,
-    variable: String,
-    source: String,
-    target: String,
+    variable: Rc<String>,
+    source: Rc<String>,
+    target: Rc<String>,
     rel_type: Option<Rc<String>>,
     properties: HashMap<String, CypherValue>,
 }
@@ -288,7 +288,7 @@ impl Graph {
                 Ok(entry.into_mut())
             }
             Entry::Vacant(entry) => {
-                let variable = entry.key().clone();
+                let variable = Rc::new(entry.key().clone());
                 let labels = parse_node
                     .labels
                     .into_iter()
@@ -332,7 +332,7 @@ impl Graph {
                 Err(GraphHandlerError::InvalidReference(entry.key().clone()))
             }
             Entry::Vacant(entry) => {
-                let variable = entry.key().clone();
+                let variable = Rc::new(entry.key().clone());
 
                 let rel_type =
                     parse_relationship
@@ -347,8 +347,8 @@ impl Graph {
 
                 let new_relationship = Relationship {
                     id: next_id,
-                    source: String::default(),
-                    target: String::default(),
+                    source: Rc::new(String::default()),
+                    target: Rc::new(String::default()),
                     variable,
                     rel_type,
                     properties: parse_relationship.properties,
@@ -360,25 +360,25 @@ impl Graph {
     }
 
     fn convert_path(&mut self, parse_path: ParsePath) -> Result<(), GraphHandlerError> {
-        let mut first_node_id = self.convert_node(parse_path.start)?.variable.clone();
+        let mut first_node_variable = Rc::clone(&self.convert_node(parse_path.start)?.variable);
 
         for (parse_rel, parse_node) in parse_path.elements.into_iter() {
             let direction = parse_rel.direction;
-            let second_node_id = self.convert_node(parse_node)?.variable.clone();
+            let second_node_variable = Rc::clone(&self.convert_node(parse_node)?.variable);
             let relationship = self.convert_relationship(parse_rel)?;
 
             match direction {
                 Direction::Outgoing => {
-                    relationship.source = first_node_id;
-                    relationship.target = second_node_id.clone();
+                    relationship.source = first_node_variable;
+                    relationship.target = Rc::clone(&second_node_variable);
                 }
                 Direction::Incoming => {
-                    relationship.source = second_node_id.clone();
-                    relationship.target = first_node_id;
+                    relationship.source = Rc::clone(&second_node_variable);
+                    relationship.target = first_node_variable;
                 }
             }
 
-            first_node_id = second_node_id;
+            first_node_variable = second_node_variable;
         }
         Ok(())
     }
@@ -404,7 +404,7 @@ mod tests {
             properties: HashMap<impl Into<String>, CypherValue>,
         ) -> Self {
             Self {
-                variable: variable.to_string(),
+                variable: Rc::new(variable.to_string()),
                 labels: labels
                     .into_iter()
                     .map(|label| Rc::new(label.into()))
@@ -424,7 +424,7 @@ mod tests {
             T: Into<String>,
         {
             Self {
-                variable: variable.into(),
+                variable: Rc::new(variable.into()),
                 rel_type: rel_type.map(|s| Rc::new(s.to_string())),
                 properties: properties
                     .into_iter()
@@ -524,7 +524,7 @@ mod tests {
 
         let n = Node {
             id: 42,
-            variable: "n42".into(),
+            variable: Rc::new("n42".into()),
             labels: vec![Rc::new("A".into()), Rc::new("B".into())],
             properties,
         };
@@ -547,9 +547,9 @@ mod tests {
 
         let r = Relationship {
             id: 42,
-            source: String::from("n13"),
-            target: String::from("n37"),
-            variable: "r42".to_string(),
+            source: Rc::new(String::from("n13")),
+            target: Rc::new(String::from("n37")),
+            variable: Rc::new("r42".to_string()),
             rel_type: Some(Rc::new("REL".to_string())),
             properties,
         };
