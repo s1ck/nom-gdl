@@ -21,7 +21,7 @@ let gdl_string = "(alice:Person { name: 'Alice', age: 23 }),
                   (bob:Person { name: 'Bob', age: 42 }),
                   (alice)-[r:KNOWS { since: 1984 }]->(bob)";
 
-let graph = Graph::from(gdl_string).unwrap();
+let graph = gdl_string.parse::<gdl::Graph>().unwrap();
 
 assert_eq!(graph.node_count(), 2);
 assert_eq!(graph.relationship_count(), 1);
@@ -39,7 +39,7 @@ assert_eq!(relationship.rel_type(), Some("KNOWS"));
 Define a node:
 
 ```rust
-let g = gdl::Graph::from("()").unwrap();
+let g = "()".parse::<gdl::Graph>().unwrap();
 
 assert_eq!(g.node_count(), 1);
 ```
@@ -47,7 +47,7 @@ assert_eq!(g.node_count(), 1);
 Define a node and assign it to variable `alice`:
 
 ```rust
-let g = gdl::Graph::from("(alice)").unwrap();
+let g = "(alice)".parse::<gdl::Graph>().unwrap();
 
 assert!(g.get_node("alice").is_some());
 ```
@@ -55,7 +55,7 @@ assert!(g.get_node("alice").is_some());
 Define a node with label `User` and multiple properties:
 
 ```rust
-let g = gdl::Graph::from("(alice:User { name: 'Alice', age : 23 })").unwrap();
+let g = "(alice:User { name: 'Alice', age : 23 })".parse::<gdl::Graph>().unwrap();
 
 assert_eq!(g.get_node("alice").unwrap().labels().collect::<Vec<_>>(), vec!["User"]);
 assert!(g.get_node("alice").unwrap().property_value("name").is_some());
@@ -65,7 +65,7 @@ assert!(g.get_node("alice").unwrap().property_value("age").is_some());
  Define an outgoing relationship:
 
 ```rust
-let g = gdl::Graph::from("(alice)-->()").unwrap();
+let g = "(alice)-->()".parse::<gdl::Graph>().unwrap();
 
 assert_eq!(g.relationship_count(), 1);
 ```
@@ -73,7 +73,7 @@ assert_eq!(g.relationship_count(), 1);
 Define an incoming relationship:
 
 ```rust
-let g = gdl::Graph::from("(alice)<--()").unwrap();
+let g = "(alice)<--()".parse::<gdl::Graph>().unwrap();
 
 assert_eq!(g.relationship_count(), 1);
 ```
@@ -83,7 +83,7 @@ Define a relationship with type `KNOWS`, assign it to variable `r1` and add a pr
 ```rust
 use std::rc::Rc;
 
-let g = gdl::Graph::from("(alice)-[r1:KNOWS { since : 2014 }]->(bob)").unwrap();
+let g = "(alice)-[r1:KNOWS { since : 2014 }]->(bob)".parse::<gdl::Graph>().unwrap();
 
 assert!(g.get_relationship("r1").is_some());
 assert_eq!(g.get_relationship("r1").unwrap().rel_type(), Some("KNOWS"));
@@ -92,10 +92,10 @@ assert_eq!(g.get_relationship("r1").unwrap().rel_type(), Some("KNOWS"));
 Define multiple outgoing relationships from the same source node (i.e. `alice`):
 
 ```rust
-let g = gdl::Graph::from("
+let g = "
     (alice)-[r1:KNOWS { since : 2014 }]->(bob)
     (alice)-[r2:KNOWS { since : 2013 }]->(eve)
-").unwrap();
+".parse::<gdl::Graph>().unwrap();
 
 assert_eq!(g.node_count(), 3);
 assert_eq!(g.relationship_count(), 2);
@@ -104,7 +104,7 @@ assert_eq!(g.relationship_count(), 2);
 Define paths (four nodes and three relationships are created):
 
 ```rust
-let g = gdl::Graph::from("()-->()<--()-->()").unwrap();
+let g = "()-->()<--()-->()".parse::<gdl::Graph>().unwrap();
 
 assert_eq!(g.node_count(), 4);
 assert_eq!(g.relationship_count(), 3);
@@ -113,11 +113,11 @@ assert_eq!(g.relationship_count(), 3);
 Paths can be comma separated to express arbitrary complex patterns:
 
 ```rust
-let g = gdl::Graph::from("
+let g = "
     ()-->()<--()-->(),
     ()<--()-->()-->(),
     ()-->()<--()-->()
-").unwrap();
+".parse::<gdl::Graph>().unwrap();
 
 assert_eq!(g.node_count(), 12);
 assert_eq!(g.relationship_count(), 9);
@@ -126,3 +126,4 @@ assert_eq!(g.relationship_count(), 9);
 ### License
 
 Apache 2.0 or MIT
+

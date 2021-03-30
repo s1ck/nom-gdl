@@ -1,6 +1,7 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     rc::Rc,
+    str::FromStr,
 };
 
 use thiserror::Error;
@@ -106,38 +107,6 @@ pub struct Graph {
 }
 
 impl Graph {
-    /// Creates a new graph from the given GDL string.
-    ///
-    /// Example
-    ///
-    /// ```
-    /// use gdl::Graph;
-    /// use gdl::CypherValue;
-    /// use std::rc::Rc;
-    ///
-    /// let graph = Graph::from(
-    ///     "(alice:Person { age: 23 }),
-    ///     (bob:Person { age: 42 }),
-    ///     (alice)-[r:KNOWS]->(bob)",
-    ///     )
-    ///     .unwrap();
-    ///
-    /// assert_eq!(graph.node_count(), 2);
-    /// assert_eq!(graph.relationship_count(), 1);
-    ///
-    /// let alice = graph.get_node("alice").unwrap();
-    ///
-    /// assert_eq!(alice.property_value("age"), Some(&CypherValue::from(23)));
-    ///
-    /// let relationship = graph.get_relationship("r").unwrap();
-    /// assert_eq!(relationship.rel_type(), Some("KNOWS"));
-    /// ```
-    pub fn from(input: &str) -> Result<Self, GraphHandlerError> {
-        let mut graph_handler = Self::default();
-        graph_handler.append(input)?;
-        Ok(graph_handler)
-    }
-
     /// Parses the given GDL string and updates the graph state.
     ///
     /// Example
@@ -145,7 +114,7 @@ impl Graph {
     /// ```
     /// use gdl::Graph;
     ///
-    /// let mut graph = Graph::from("(alice),(bob)").unwrap();
+    /// let mut graph = "(alice),(bob)".parse::<gdl::Graph>().unwrap();
     ///
     /// graph.append("(alice)-[:KNOWS]->(bob)");
     /// graph.append("(bob)-[:KNOWS]->(eve)");
@@ -166,7 +135,7 @@ impl Graph {
     /// ```
     /// use gdl::Graph;
     ///
-    /// let graph = Graph::from("()-->()-->()-->()").unwrap();
+    /// let graph = "()-->()-->()-->()".parse::<gdl::Graph>().unwrap();
     ///
     /// assert_eq!(graph.node_count(), 4);
     /// ```
@@ -181,7 +150,7 @@ impl Graph {
     /// ```
     /// use gdl::Graph;
     ///
-    /// let graph = Graph::from("()-->()-->()-->()").unwrap();
+    /// let graph = "()-->()-->()-->()".parse::<gdl::Graph>().unwrap();
     ///
     /// assert_eq!(graph.relationship_count(), 3);
     /// ```
@@ -198,7 +167,7 @@ impl Graph {
     /// use gdl::CypherValue;
     /// use std::rc::Rc;
     ///
-    /// let graph = Graph::from("(n0:A:B { foo: 42, bar: 1337 })").unwrap();
+    /// let graph = "(n0:A:B { foo: 42, bar: 1337 })".parse::<gdl::Graph>().unwrap();
     ///
     /// let n0 = graph.get_node("n0").unwrap();
     ///
@@ -219,7 +188,7 @@ impl Graph {
     /// use gdl::CypherValue;
     /// use std::rc::Rc;
     ///
-    /// let graph = Graph::from("()-[r0:REL { foo: 42, bar: 13.37 }]->()").unwrap();
+    /// let graph = "()-[r0:REL { foo: 42, bar: 13.37 }]->()".parse::<gdl::Graph>().unwrap();
     ///
     /// let r0 = graph.get_relationship("r0").unwrap();
     ///
@@ -238,7 +207,7 @@ impl Graph {
     /// ```
     /// use gdl::Graph;
     ///
-    /// let graph = Graph::from("(a),(b),(c)").unwrap();
+    /// let graph = "(a),(b),(c)".parse::<gdl::Graph>().unwrap();
     ///
     /// for node in graph.nodes() {
     ///     println!("{:?}", node);
@@ -255,7 +224,7 @@ impl Graph {
     /// ```
     /// use gdl::Graph;
     ///
-    /// let graph = Graph::from("(a)-->(b)-->(c)").unwrap();
+    /// let graph = "(a)-->(b)-->(c)".parse::<gdl::Graph>().unwrap();
     ///
     /// for relationship in graph.relationships() {
     ///     println!("{:?}", relationship);
@@ -263,6 +232,41 @@ impl Graph {
     /// ```
     pub fn relationships(&self) -> impl Iterator<Item = &Relationship> {
         self.relationship_cache.values()
+    }
+}
+
+impl FromStr for Graph {
+    type Err = GraphHandlerError;
+
+    /// Creates a new graph from the given GDL string.
+    ///
+    /// Example
+    ///
+    /// ```
+    /// use gdl::Graph;
+    /// use gdl::CypherValue;
+    /// use std::rc::Rc;
+    ///
+    /// let graph =
+    ///     "(alice:Person { age: 23 }),
+    ///     (bob:Person { age: 42 }),
+    ///     (alice)-[r:KNOWS]->(bob)".parse::<gdl::Graph>().unwrap();
+    ///     
+    ///
+    /// assert_eq!(graph.node_count(), 2);
+    /// assert_eq!(graph.relationship_count(), 1);
+    ///
+    /// let alice = graph.get_node("alice").unwrap();
+    ///
+    /// assert_eq!(alice.property_value("age"), Some(&CypherValue::from(23)));
+    ///
+    /// let relationship = graph.get_relationship("r").unwrap();
+    /// assert_eq!(relationship.rel_type(), Some("KNOWS"));
+    /// ```
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let mut graph_handler = Self::default();
+        graph_handler.append(input)?;
+        Ok(graph_handler)
     }
 }
 
@@ -581,7 +585,7 @@ mod tests {
 
     #[test]
     fn append_gdl() {
-        let mut graph_handler = Graph::from("(a)").unwrap();
+        let mut graph_handler = Graph::from_str("(a)").unwrap();
         graph_handler.append("(a)-->(b)").unwrap();
         graph_handler.append("(b)-->(c)").unwrap();
 
@@ -591,7 +595,7 @@ mod tests {
 
     #[test]
     fn nodes_iterator() {
-        let graph_handler = Graph::from("(a),(b),(c),(d),()").unwrap();
+        let graph_handler = Graph::from_str("(a),(b),(c),(d),()").unwrap();
         let mut nodes = graph_handler
             .nodes()
             .map(|node| node.variable.as_str())
@@ -602,7 +606,7 @@ mod tests {
 
     #[test]
     fn relationships_iterator() {
-        let graph_handler = Graph::from("()-[r1]->()-[r2]->()-->()").unwrap();
+        let graph_handler = Graph::from_str("()-[r1]->()-[r2]->()-->()").unwrap();
         let mut rels = graph_handler
             .relationships()
             .map(|rel| rel.variable.as_str())
