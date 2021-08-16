@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, tag, take_while, take_while1},
+    bytes::complete::{escaped, tag, tag_no_case, take_while, take_while1},
     character::complete::{alpha1, alphanumeric1, digit0, digit1, none_of},
     combinator::{all_consuming, cut, map, opt, recognize},
     error::Error,
@@ -10,6 +10,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult,
 };
+
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Node {
     pub(crate) variable: Option<String>,
@@ -190,6 +191,7 @@ pub enum CypherValue {
     Float(f64),
     Integer(i64),
     String(String),
+    Boolean(bool),
 }
 
 impl From<f64> for CypherValue {
@@ -216,6 +218,12 @@ impl From<&str> for CypherValue {
     }
 }
 
+impl From<bool> for CypherValue {
+    fn from(value: bool) -> Self {
+        CypherValue::Boolean(value)
+    }
+}
+
 impl FromStr for CypherValue {
     type Err = Error<String>;
 
@@ -233,9 +241,10 @@ impl FromStr for CypherValue {
 impl Display for CypherValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CypherValue::Float(float) => write!(f, "{}", float),
-            CypherValue::Integer(integer) => write!(f, "{}", integer),
-            CypherValue::String(string) => f.pad(string),
+            CypherValue::Float(float)       => write!(f, "{}", float),
+            CypherValue::Integer(integer)   => write!(f, "{}", integer),
+            CypherValue::String(string)     => f.pad(string),
+            CypherValue::Boolean(boolean)   => write!(f, "{}", boolean),
         }
     }
 }
@@ -302,8 +311,15 @@ fn string_literal(input: &str) -> IResult<&str, CypherValue> {
     )(input)
 }
 
+fn boolean_literal(input: &str) -> IResult<&str, CypherValue> {
+  alt((
+      map(tag_no_case("false"), |_| CypherValue::Boolean(false)),
+      map(tag_no_case("true"),  |_| CypherValue::Boolean(true))
+  ))(input)
+}
+
 fn cypher_value(input: &str) -> IResult<&str, CypherValue> {
-    preceded(sp, alt((float_literal, integer_literal, string_literal)))(input)
+    preceded(sp, alt((float_literal, integer_literal, string_literal, boolean_literal)))(input)
 }
 
 fn variable(input: &str) -> IResult<&str, String> {
@@ -579,6 +595,8 @@ mod tests {
     #[test_case("\"    \"",       CypherValue::from("    ")         ; "dq string: whitespacec")]
     #[test_case("\"\"",           CypherValue::from("")             ; "dq string: empty")]
     #[test_case(r#""foobar\"s""#, CypherValue::from(r#"foobar\"s"#) ; "dq string: escaped")]
+    #[test_case("true",           CypherValue::from(true)  ; "bool: true")]
+    #[test_case("false",          CypherValue::from(false) ; "bool: false")]
     fn cypher_value(input: &str, expected: CypherValue) {
         assert_eq!(input.parse(), Ok(expected))
     }
@@ -587,7 +605,8 @@ mod tests {
     fn cypher_value_from() {
         assert_eq!(CypherValue::from(42), CypherValue::from(42));
         assert_eq!(CypherValue::from(13.37), CypherValue::from(13.37));
-        assert_eq!(CypherValue::from("foobar"), CypherValue::from("foobar"))
+        assert_eq!(CypherValue::from("foobar"), CypherValue::from("foobar"));
+        assert_eq!(CypherValue::from(true), CypherValue::from(true));
     }
 
     #[test]
@@ -596,12 +615,14 @@ mod tests {
         assert_eq!("13.37", format!("{}", CypherValue::from(13.37)));
         assert_eq!("foobar", format!("{}", CypherValue::from("foobar")));
         assert_eq!("00foobar", format!("{:0>8}", CypherValue::from("foobar")));
+        assert_eq!("true", format!("{}", CypherValue::from(true)));
     }
 
     #[test_case("key:42",         ("key".to_string(), CypherValue::from(42)))]
     #[test_case("key: 1337",      ("key".to_string(), CypherValue::from(1337)))]
     #[test_case("key2: 1337",     ("key2".to_string(), CypherValue::from(1337)))]
     #[test_case("key2: 'foobar'", ("key2".to_string(), CypherValue::from("foobar")))]
+    #[test_case("key3: true",     ("key3".to_string(), CypherValue::from(true)))]
     fn key_value_pair_test(input: &str, expected: (String, CypherValue)) {
         assert_eq!(key_value_pair(input).unwrap().1, expected)
     }
