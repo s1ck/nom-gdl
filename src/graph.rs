@@ -286,7 +286,7 @@ impl Graph {
         match self.node_cache.entry(variable) {
             Entry::Occupied(entry) => {
                 // verify that parse node has no additional content
-                if parse_node.labels.len() > 0 {
+                if !parse_node.labels.is_empty() {
                     return Err(GraphHandlerError::MultipleDeclarations(entry.key().clone()));
                 }
                 Ok(entry.into_mut())
