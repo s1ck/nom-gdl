@@ -241,10 +241,10 @@ impl FromStr for CypherValue {
 impl Display for CypherValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CypherValue::Float(float)       => write!(f, "{}", float),
-            CypherValue::Integer(integer)   => write!(f, "{}", integer),
-            CypherValue::String(string)     => f.pad(string),
-            CypherValue::Boolean(boolean)   => write!(f, "{}", boolean),
+            CypherValue::Float(float) => write!(f, "{}", float),
+            CypherValue::Integer(integer) => write!(f, "{}", integer),
+            CypherValue::String(string) => f.pad(string),
+            CypherValue::Boolean(boolean) => write!(f, "{}", boolean),
         }
     }
 }
@@ -307,21 +307,29 @@ fn double_quoted_string(input: &str) -> IResult<&str, &str> {
 fn string_literal(input: &str) -> IResult<&str, CypherValue> {
     map(
         alt((single_quoted_string, double_quoted_string)),
-        |literal: &str| CypherValue::from(literal),
+        CypherValue::from,
     )(input)
 }
 
 fn boolean_literal(input: &str) -> IResult<&str, CypherValue> {
     alt((
-        map(tag("true"),  |_| CypherValue::Boolean(true)),
-        map(tag("TRUE"),  |_| CypherValue::Boolean(true)),
+        map(tag("true"), |_| CypherValue::Boolean(true)),
+        map(tag("TRUE"), |_| CypherValue::Boolean(true)),
         map(tag("false"), |_| CypherValue::Boolean(false)),
-        map(tag("FALSE"), |_| CypherValue::Boolean(false))
+        map(tag("FALSE"), |_| CypherValue::Boolean(false)),
     ))(input)
 }
 
 fn cypher_value(input: &str) -> IResult<&str, CypherValue> {
-    preceded(sp, alt((float_literal, integer_literal, string_literal, boolean_literal)))(input)
+    preceded(
+        sp,
+        alt((
+            float_literal,
+            integer_literal,
+            string_literal,
+            boolean_literal,
+        )),
+    )(input)
 }
 
 fn variable(input: &str) -> IResult<&str, String> {
@@ -391,16 +399,13 @@ fn rel_type(input: &str) -> IResult<&str, String> {
     )(input)
 }
 
-fn node_body(
-    input: &str,
-) -> IResult<
-    &str,
-    (
-        Option<String>,
-        Vec<String>,
-        Option<HashMap<String, CypherValue>>,
-    ),
-> {
+type NodeBody = (
+    Option<String>,                       // variable
+    Vec<String>,                          // labels
+    Option<HashMap<String, CypherValue>>, // properties
+);
+
+fn node_body(input: &str) -> IResult<&str, NodeBody> {
     delimited(
         sp,
         tuple((opt(variable), many0(label), opt(properties))),
@@ -412,16 +417,13 @@ pub(crate) fn node(input: &str) -> IResult<&str, Node> {
     map(delimited(tag("("), node_body, tag(")")), Node::from)(input)
 }
 
-fn relationship_body(
-    input: &str,
-) -> IResult<
-    &str,
-    (
-        Option<String>,
-        Option<String>,
-        Option<HashMap<String, CypherValue>>,
-    ),
-> {
+type RelationshipBody = (
+    Option<String>,                       // variable
+    Option<String>,                       // relationship type
+    Option<HashMap<String, CypherValue>>, // properties
+);
+
+fn relationship_body(input: &str) -> IResult<&str, RelationshipBody> {
     delimited(
         tag("["),
         delimited(
