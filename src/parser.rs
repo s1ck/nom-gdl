@@ -200,17 +200,14 @@ pub struct List(Vec<CypherValue>);
 
 impl fmt::Display for List {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "[")?;
+        let values = self
+            .0
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
 
-        for (i, value) in self.0.iter().enumerate() {
-            if i != 0 {
-                write!(formatter, ", ")?;
-            }
-
-            write!(formatter, "{}", value)?;
-        }
-
-        write!(formatter, "]")
+        write!(formatter, "[{}]", values)
     }
 }
 
@@ -670,6 +667,18 @@ mod tests {
         assert_eq!("foobar", format!("{}", CypherValue::from("foobar")));
         assert_eq!("00foobar", format!("{:0>8}", CypherValue::from("foobar")));
         assert_eq!("true", format!("{}", CypherValue::from(true)));
+    }
+
+    #[test]
+    fn list_display_test() {
+        let list = CypherValue::List(List(vec![
+            CypherValue::Float(13.37),
+            CypherValue::Integer(42),
+            CypherValue::Boolean(true),
+            CypherValue::String(String::from("foobar")),
+        ]));
+
+        assert_eq!(format!("{}", list), "[13.37, 42, true, foobar]");
     }
 
     #[test_case("key:42",         ("key".to_string(), CypherValue::from(42)))]
