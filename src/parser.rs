@@ -1,12 +1,12 @@
-use std::{collections::HashMap, fmt::Display, str::FromStr};
+use std::{collections::HashMap, fmt, str::FromStr};
 
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
-    character::complete::{alpha1, alphanumeric1, digit0, digit1, none_of},
+    character::complete::{alpha1, alphanumeric1, char, digit0, digit1, none_of},
     combinator::{all_consuming, cut, map, opt, recognize},
-    error::Error,
-    multi::{many0, many1},
+    error::{context, Error},
+    multi::{many0, many1, separated_list0},
     sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult,
 };
@@ -192,6 +192,23 @@ pub enum CypherValue {
     Integer(i64),
     String(String),
     Boolean(bool),
+    List(List),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct List(Vec<CypherValue>);
+
+impl fmt::Display for List {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        let values = self
+            .0
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        write!(formatter, "[{}]", values)
+    }
 }
 
 impl From<f64> for CypherValue {
@@ -238,13 +255,21 @@ impl FromStr for CypherValue {
     }
 }
 
-impl Display for CypherValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: Into<CypherValue>> From<Vec<T>> for CypherValue {
+    fn from(value: Vec<T>) -> Self {
+        let vector = value.into_iter().map(|entry| entry.into()).collect();
+        CypherValue::List(List(vector))
+    }
+}
+
+impl fmt::Display for CypherValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CypherValue::Float(float) => write!(f, "{}", float),
             CypherValue::Integer(integer) => write!(f, "{}", integer),
             CypherValue::String(string) => f.pad(string),
             CypherValue::Boolean(boolean) => write!(f, "{}", boolean),
+            CypherValue::List(list) => write!(f, "{}", list),
         }
     }
 }
@@ -320,7 +345,23 @@ fn boolean_literal(input: &str) -> IResult<&str, CypherValue> {
     ))(input)
 }
 
-fn cypher_value(input: &str) -> IResult<&str, CypherValue> {
+fn list_literal(input: &str) -> IResult<&str, CypherValue> {
+    context(
+        "list",
+        preceded(
+            char('['),
+            cut(terminated(
+                map(
+                    separated_list0(preceded(sp, char(',')), literal),
+                    |vector| CypherValue::List(List(vector)),
+                ),
+                preceded(sp, char(']')),
+            )),
+        ),
+    )(input)
+}
+
+fn literal(input: &str) -> IResult<&str, CypherValue> {
     preceded(
         sp,
         alt((
@@ -330,6 +371,10 @@ fn cypher_value(input: &str) -> IResult<&str, CypherValue> {
             boolean_literal,
         )),
     )(input)
+}
+
+fn cypher_value(input: &str) -> IResult<&str, CypherValue> {
+    preceded(sp, alt((literal, list_literal)))(input)
 }
 
 fn variable(input: &str) -> IResult<&str, String> {
@@ -578,29 +623,33 @@ mod tests {
         }
     }
 
-    #[test_case("0",              CypherValue::from(0)   ; "int: zero")]
-    #[test_case("-0",             CypherValue::from(0)   ; "int: signed zero")]
-    #[test_case("42",             CypherValue::from(42)  ; "int: positive")]
-    #[test_case("-42",            CypherValue::from(-42) ; "int: negative")]
-    #[test_case("0.0",            CypherValue::from(0.0)   ; "float: zero v1")]
-    #[test_case("0.",             CypherValue::from(0.0)   ; "float: zero v2")]
-    #[test_case(".0",             CypherValue::from(0.0)   ; "float: zero v3")]
-    #[test_case("-0.0",           CypherValue::from(0.0)   ; "float: signed zero")]
-    #[test_case("-.0",            CypherValue::from(0.0)   ; "float: signed zero v2")]
-    #[test_case("13.37",          CypherValue::from(13.37) ; "float: positive")]
-    #[test_case("-42.2",          CypherValue::from(-42.2) ; "float: negative")]
-    #[test_case("'foobar'",       CypherValue::from("foobar")       ; "sq string: alpha")]
-    #[test_case("'1234'",         CypherValue::from("1234")         ; "sq string: numeric")]
-    #[test_case("'    '",         CypherValue::from("    ")         ; "sq string: whitespacec")]
-    #[test_case("''",             CypherValue::from("")             ; "sq string: empty")]
-    #[test_case(r#"'foobar\'s'"#, CypherValue::from(r#"foobar\'s"#) ; "sq string: escaped")]
-    #[test_case("\"foobar\"",     CypherValue::from("foobar")       ; "dq string: alpha")]
-    #[test_case("\"1234\"",       CypherValue::from("1234")         ; "dq string: numeric")]
-    #[test_case("\"    \"",       CypherValue::from("    ")         ; "dq string: whitespacec")]
-    #[test_case("\"\"",           CypherValue::from("")             ; "dq string: empty")]
-    #[test_case(r#""foobar\"s""#, CypherValue::from(r#"foobar\"s"#) ; "dq string: escaped")]
-    #[test_case("true",           CypherValue::from(true)  ; "bool: true")]
-    #[test_case("FALSE",          CypherValue::from(false) ; "bool: false")]
+    #[test_case("0",               CypherValue::from(0)   ; "int: zero")]
+    #[test_case("-0",              CypherValue::from(0)   ; "int: signed zero")]
+    #[test_case("42",              CypherValue::from(42)  ; "int: positive")]
+    #[test_case("-42",             CypherValue::from(-42) ; "int: negative")]
+    #[test_case("0.0",             CypherValue::from(0.0)   ; "float: zero v1")]
+    #[test_case("0.",              CypherValue::from(0.0)   ; "float: zero v2")]
+    #[test_case(".0",              CypherValue::from(0.0)   ; "float: zero v3")]
+    #[test_case("-0.0",            CypherValue::from(0.0)   ; "float: signed zero")]
+    #[test_case("-.0",             CypherValue::from(0.0)   ; "float: signed zero v2")]
+    #[test_case("13.37",           CypherValue::from(13.37) ; "float: positive")]
+    #[test_case("-42.2",           CypherValue::from(-42.2) ; "float: negative")]
+    #[test_case("'foobar'",        CypherValue::from("foobar")       ; "sq string: alpha")]
+    #[test_case("'1234'",          CypherValue::from("1234")         ; "sq string: numeric")]
+    #[test_case("'    '",          CypherValue::from("    ")         ; "sq string: whitespacec")]
+    #[test_case("''",              CypherValue::from("")             ; "sq string: empty")]
+    #[test_case(r#"'foobar\'s'"#,  CypherValue::from(r#"foobar\'s"#) ; "sq string: escaped")]
+    #[test_case("\"foobar\"",      CypherValue::from("foobar")       ; "dq string: alpha")]
+    #[test_case("\"1234\"",        CypherValue::from("1234")         ; "dq string: numeric")]
+    #[test_case("\"    \"",        CypherValue::from("    ")         ; "dq string: whitespacec")]
+    #[test_case("\"\"",            CypherValue::from("")             ; "dq string: empty")]
+    #[test_case(r#""foobar\"s""#,  CypherValue::from(r#"foobar\"s"#) ; "dq string: escaped")]
+    #[test_case("true",            CypherValue::from(true)  ; "bool: true")]
+    #[test_case("FALSE",           CypherValue::from(false) ; "bool: false")]
+    #[test_case("[1, -2, 3]",      CypherValue::from(vec![1, -2, 3])      ; "list: [1, -2, 3]")]
+    #[test_case("[1.0, 2.5, .1]",  CypherValue::from(vec![1.0, 2.5, 0.1]) ; "list: [1.0, 2.5, 0.1]")]
+    #[test_case("[true, false]",   CypherValue::from(vec![true, false])   ; "list: [true, false]")]
+    #[test_case(r#"["ab", "cd"]"#, CypherValue::from(vec!["ab", "cd"])    ; "list: [\"ab\", \"cd\"]")]
     fn cypher_value(input: &str, expected: CypherValue) {
         assert_eq!(input.parse(), Ok(expected))
     }
@@ -620,6 +669,18 @@ mod tests {
         assert_eq!("foobar", format!("{}", CypherValue::from("foobar")));
         assert_eq!("00foobar", format!("{:0>8}", CypherValue::from("foobar")));
         assert_eq!("true", format!("{}", CypherValue::from(true)));
+    }
+
+    #[test]
+    fn list_display_test() {
+        let list = CypherValue::List(List(vec![
+            CypherValue::Float(13.37),
+            CypherValue::Integer(42),
+            CypherValue::Boolean(true),
+            CypherValue::String(String::from("foobar")),
+        ]));
+
+        assert_eq!(format!("{}", list), "[13.37, 42, true, foobar]");
     }
 
     #[test_case("key:42",         ("key".to_string(), CypherValue::from(42)))]
