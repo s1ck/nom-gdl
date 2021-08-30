@@ -9,7 +9,7 @@ repository = "https://github.com/s1ck/nom-gdl"
 version = "0.2.5"
 
 [dependencies]
-nom = "6"
+nom = "7"
 thiserror = "1.0.24"
 
 [dev-dependencies]

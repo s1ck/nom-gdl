@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt, str::FromStr};
 
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, tag, tag_no_case, take_while, take_while1},
+    bytes::complete::{escaped, tag, take_while, take_while1},
     character::complete::{alpha1, alphanumeric1, char, digit0, digit1, none_of},
     combinator::{all_consuming, cut, map, opt, recognize},
     error::{context, Error},
@@ -338,8 +338,10 @@ fn string_literal(input: &str) -> IResult<&str, CypherValue> {
 
 fn boolean_literal(input: &str) -> IResult<&str, CypherValue> {
     alt((
-        map(tag_no_case("false"), |_| CypherValue::Boolean(false)),
-        map(tag_no_case("true"), |_| CypherValue::Boolean(true)),
+        map(tag("true"), |_| CypherValue::Boolean(true)),
+        map(tag("TRUE"), |_| CypherValue::Boolean(true)),
+        map(tag("false"), |_| CypherValue::Boolean(false)),
+        map(tag("FALSE"), |_| CypherValue::Boolean(false)),
     ))(input)
 }
 
@@ -643,7 +645,7 @@ mod tests {
     #[test_case("\"\"",            CypherValue::from("")             ; "dq string: empty")]
     #[test_case(r#""foobar\"s""#,  CypherValue::from(r#"foobar\"s"#) ; "dq string: escaped")]
     #[test_case("true",            CypherValue::from(true)  ; "bool: true")]
-    #[test_case("false",           CypherValue::from(false) ; "bool: false")]
+    #[test_case("FALSE",           CypherValue::from(false) ; "bool: false")]
     #[test_case("[1, -2, 3]",      CypherValue::from(vec![1, -2, 3])      ; "list: [1, -2, 3]")]
     #[test_case("[1.0, 2.5, .1]",  CypherValue::from(vec![1.0, 2.5, 0.1]) ; "list: [1.0, 2.5, 0.1]")]
     #[test_case("[true, false]",   CypherValue::from(vec![true, false])   ; "list: [true, false]")]
