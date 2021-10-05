@@ -10,9 +10,9 @@ version = "0.2.5"
 
 [dependencies]
 nom = "7"
-thiserror = "1.0.24"
+thiserror = "1.0.29"
 
 [dev-dependencies]
 doc-comment = "0.3.3"
-test-case = "1.1.0"
-pretty_assertions = "0.7.1"
+test-case = "1.2.0"
+pretty_assertions = "1.0.0"
