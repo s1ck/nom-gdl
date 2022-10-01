@@ -9,10 +9,10 @@ repository = "https://github.com/s1ck/nom-gdl"
 version = "0.2.5"
 
 [dependencies]
-nom = "7"
-thiserror = "1.0.29"
+nom = "7.1"
+thiserror = "1.0"
 
 [dev-dependencies]
-doc-comment = "0.3.3"
-test-case = "1.2.0"
-pretty_assertions = "1.0.0"
+doc-comment = "0.3"
+test-case = "2.2"
+pretty_assertions = "1.3"
